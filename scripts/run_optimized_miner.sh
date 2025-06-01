@@ -28,7 +28,7 @@ echo "- Large OS pages enabled"
 MONITOR_PID=$!
 
 # Run the miner
-nockchain --mining-pubkey ${MINING_PUBKEY} --mine
+./target/release/nockchain --mining-pubkey ${MINING_PUBKEY} --mine
 
 # Clean up
 kill $MONITOR_PID 2>/dev/null
