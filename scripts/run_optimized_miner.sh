@@ -19,7 +19,7 @@ echo "- Large OS pages enabled"
 (
     while true; do
         sleep 30
-        MEM=$(ps aux | grep nockchain | grep -v grep | awk '{print $6/1024 " MB"}' | head -1)
+        MEM=$(ps aux | grep -E "(nockchain|target/release/nockchain)" | grep -v grep | awk '{print $6/1024 " MB"}' | head -1)
         if [ ! -z "$MEM" ]; then
             echo "[Memory Monitor] Current usage: $MEM"
         fi
@@ -27,11 +27,8 @@ echo "- Large OS pages enabled"
 ) &
 MONITOR_PID=$!
 
-# Run the miner
+# Run the miner using the binary in target/release
 ./target/release/nockchain --mining-pubkey ${MINING_PUBKEY} --mine
 
 # Clean up
 kill $MONITOR_PID 2>/dev/null
-
-
--bash chmod +x scripts/run_optimized_miner.sh
