@@ -177,7 +177,7 @@ pub async fn mining_attempt(candidate: NounSlab, handle: NockAppHandle) -> () {
             KERNEL, 
             &hot_state, 
             false
-        ).await.map_err(|e| Box::new(e) as Box<dyn std::error::Error + Send + Sync>)?;
+        ).await.expect("Failed to load kernel");
         
         Ok((kernel, snapshot_dir, jam_paths))
     }).await;
