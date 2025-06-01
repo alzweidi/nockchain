@@ -19,10 +19,10 @@ impl KernelPool {
     pub async fn get_or_create<F, Fut>(
         &self, 
         create_fn: F
-    ) -> Result<(Kernel, TempDir, JamPaths), Box<dyn std::error::Error + Send + Sync>>
+    ) -> Result<(Kernel, TempDir, JamPaths), String>
     where
         F: FnOnce() -> Fut,
-        Fut: std::future::Future<Output = Result<(Kernel, TempDir, JamPaths), Box<dyn std::error::Error + Send + Sync>>>,
+        Fut: std::future::Future<Output = Result<(Kernel, TempDir, JamPaths), String>>,
     {
         let mut kernel_opt = self.kernel.lock().await;
         
