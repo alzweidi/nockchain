@@ -21,10 +21,6 @@ tracing-subscriber = { workspace = true }
 walkdir = "2.5.0"
 # Memory optimization dependencies
 lazy_static = "1.4"
-mimalloc = { version = "0.1", default-features = false }
-bumpalo = "3.14"
-rayon = "1.8"
-num_cpus = "1.16"
 
 [[bin]]
 name = "hoonc"
