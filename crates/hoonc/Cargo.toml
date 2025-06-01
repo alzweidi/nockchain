@@ -30,10 +30,6 @@ num_cpus = "1.16"
 name = "hoonc"
 path = "src/main.rs"
 
-# Add test binary for memory testing
-[[bin]]
-name = "test_memory"
-path = "src/bin/test_memory.rs"
 
 [profile.release]
 opt-level = 3
