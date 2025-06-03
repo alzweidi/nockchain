@@ -182,7 +182,11 @@ pub fn create_mining_driver(
             let total_threads = std::env::var("MINING_THREADS")
                 .ok()
                 .and_then(|s| s.parse().ok())
-                .unwrap_or_else(|| num_cpus::get());
+                .unwrap_or_else(|| {
+                    std::thread::available_parallelism()
+                        .map(|n| n.get())
+                        .unwrap_or(4)
+                });
             
             // Calculate optimal worker count
             let worker_count = calculate_optimal_workers(total_threads);
@@ -276,7 +280,7 @@ pub fn create_mining_driver(
 async fn mining_worker(
     worker_id: usize,
     candidate_rx: Arc<tokio::sync::Mutex<mpsc::Receiver<NounSlab>>>,
-    handle: NockAppHandle,
+    mut handle: NockAppHandle,
 ) -> usize {
     info!("Mining worker {} starting, initializing resources...", worker_id);
     
@@ -305,7 +309,9 @@ async fn mining_worker(
         };
         
         // Process the mining attempt with this worker's kernel
-        mining_attempt_with_worker(candidate, handle.clone(), resources.clone(), worker_id).await;
+        // Create a new handle for this attempt
+        let (attempt_handle, _) = handle.dup();
+        mining_attempt_with_worker(candidate, attempt_handle, resources.clone(), worker_id).await;
     }
 }
 
