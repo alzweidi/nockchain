@@ -200,28 +200,22 @@ fn bp_ntt_parallel(bp: &[Belt], root: &Belt) -> Vec<Belt> {
     // Parallel bit-reversal permutation
     let threads = get_mining_threads();
     if n >= 1024 && threads > 1 {
-        // Create a vector to track which indices have been swapped
-        let swapped = std::sync::Mutex::new(vec![false; n]);
+        // Create a permuted copy in parallel
+        let mut x_permuted = vec![Belt(0); n];
         
-        (0..n).into_par_iter().for_each(|k| {
-            let k = k as u32;
-            let rk = bitreverse(k, log_n);
-            if k < rk {
-                let mut swapped_guard = swapped.lock().unwrap();
-                if !swapped_guard[k as usize] && !swapped_guard[rk as usize] {
-                    swapped_guard[k as usize] = true;
-                    swapped_guard[rk as usize] = true;
-                    drop(swapped_guard);
-                    
-                    // Perform the swap - this is safe because we've guaranteed
-                    // no other thread will touch these indices
-                    unsafe {
-                        let x_ptr = x.as_mut_ptr();
-                        std::ptr::swap(x_ptr.add(k as usize), x_ptr.add(rk as usize));
-                    }
+        x_permuted.par_chunks_mut(n / threads)
+            .enumerate()
+            .for_each(|(chunk_idx, chunk)| {
+                let chunk_start = chunk_idx * (n / threads);
+                for (i, val) in chunk.iter_mut().enumerate() {
+                    let k = (chunk_start + i) as u32;
+                    let rk = bitreverse(k, log_n);
+                    *val = x[rk as usize];
                 }
-            }
-        });
+            });
+        
+        // Replace x with the permuted version
+        x = x_permuted;
     } else {
         // Sequential bit reversal for small inputs
         for k in 0..n as u32 {
