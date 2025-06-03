@@ -1,6 +1,5 @@
 pub mod base_jets;
 pub mod bp_jets;
-#[cfg(feature = "parallel-mining")]
 pub mod bp_jets_parallel;
 pub mod cheetah_jets;
 pub mod crypto_jets;
