@@ -18,11 +18,12 @@ strum.workspace = true
 nockvm.workspace = true
 nockvm_macros.workspace = true
 tracing.workspace = true
-rayon = { workspace = true, optional = true }
+rayon = { workspace = true }
+num_cpus = "1.16"
 
 [dev-dependencies]
 quickcheck.workspace = true
 
 [features]
 default = []
-parallel-mining = ["rayon"]
+parallel-mining = []
