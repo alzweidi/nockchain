@@ -205,9 +205,12 @@ pub fn create_mining_driver(
             // Start mining worker pool
             let mut mining_workers = JoinSet::new();
             
+            let mut handle = handle; // Make handle mutable for reassignment
+            
             for worker_id in 0..worker_count {
                 let worker_rx = candidate_rx.clone();
-                let (worker_handle, _) = handle.dup();
+                let (new_handle, worker_handle) = handle.dup();
+                handle = new_handle;  // Reassign handle for next iteration
                 
                 mining_workers.spawn(mining_worker(
                     worker_id,
@@ -215,8 +218,6 @@ pub fn create_mining_driver(
                     worker_handle,
                 ));
             }
-
-            let mut handle = handle;
 
             loop {
                 tokio::select! {
@@ -257,7 +258,7 @@ pub fn create_mining_driver(
                                 // Restart the worker
                                 let worker_rx = candidate_rx.clone();
                                 let (new_handle, worker_handle) = handle.dup();
-                                handle = new_handle;
+                                handle = new_handle;  // Reassign handle
                                 
                                 mining_workers.spawn(mining_worker(
                                     worker_id,
@@ -310,7 +311,8 @@ async fn mining_worker(
         
         // Process the mining attempt with this worker's kernel
         // Create a new handle for this attempt
-        let (attempt_handle, _) = handle.dup();
+        let (new_handle, attempt_handle) = handle.dup();
+        handle = new_handle; // Save one handle for the next iteration
         mining_attempt_with_worker(candidate, attempt_handle, resources.clone(), worker_id).await;
     }
 }
