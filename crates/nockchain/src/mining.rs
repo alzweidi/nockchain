@@ -14,21 +14,20 @@ use nockvm::noun::{Atom, D, T};
 use nockvm_macros::tas;
 use tempfile::tempdir;
 use tracing::{instrument, warn, info};
-use tokio::sync::{mpsc, RwLock};
+use tokio::sync::mpsc;
 use tokio::task::JoinSet;
 
 /// Mining module for Nockchain
 /// 
-/// This module implements parallel mining with the following optimizations:
-/// - **Parallel proof attempts**: Multiple mining workers run concurrently (default: 4 threads)
-/// - **Kernel caching**: Each worker loads the kernel once and reuses it for all attempts
-/// - **Pre-allocated resources**: Workers maintain their own resources to avoid repeated allocations
-/// - **Work queue**: Candidates are distributed to workers via a bounded channel
+/// This module implements optimized mining with the following improvements:
+/// - **Resource caching**: Kernel and hot state are loaded once and reused
+/// - **Pre-allocated resources**: Temporary directories and JAM paths are created once
+/// - **Efficient memory management**: Eliminates repeated 100MB+ allocations
 /// 
-/// Configuration:
-/// - Set `MINING_THREADS` environment variable to control parallelism (default: 4)
-/// - Workers automatically restart if they crash
-/// - Maximum queue size is 16 candidates to prevent memory issues
+/// Future optimizations (see MINING_OPTIMIZATION_PLAN.md):
+/// - Parallel FFT/NTT operations in jets
+/// - SIMD vectorization for field arithmetic
+/// - GPU acceleration for polynomial operations
 
 pub enum MiningWire {
     Mined,
@@ -94,16 +93,12 @@ struct MiningResources {
     snapshot_dir: PathBuf,
 }
 
-// Mining worker configuration
-const DEFAULT_MINING_THREADS: usize = 4; // Configurable based on CPU cores
-const MAX_MINING_QUEUE: usize = 16; // Maximum queued candidates
-
 pub fn create_mining_driver(
     mining_config: Option<Vec<MiningKeyConfig>>,
     mine: bool,
     init_complete_tx: Option<tokio::sync::oneshot::Sender<()>>,
 ) -> IODriverFn {
-    Box::new(move |mut handle| {
+    Box::new(move |handle| {
         Box::pin(async move {
             let Some(configs) = mining_config else {
                 enable_mining(&handle, false).await?;
@@ -139,38 +134,21 @@ pub fn create_mining_driver(
                 return Ok(());
             }
 
-            // Determine number of mining threads
-            let mining_threads = std::env::var("MINING_THREADS")
-                .ok()
-                .and_then(|s| s.parse().ok())
-                .unwrap_or(DEFAULT_MINING_THREADS);
-            
-            info!("Starting {} mining worker threads", mining_threads);
+            // Pre-initialize mining resources once
+            info!("Initializing mining resources...");
+            let resources = match initialize_mining_resources().await {
+                Ok(res) => Arc::new(res),
+                Err(e) => {
+                    warn!("Failed to initialize mining resources: {:?}", e);
+                    return Err(NockAppError::OtherError);
+                }
+            };
+            info!("Mining resources initialized successfully");
 
-            // Create channels for distributing work to mining threads
-            let (candidate_tx, candidate_rx) = mpsc::channel::<NounSlab>(MAX_MINING_QUEUE);
-            let candidate_rx = Arc::new(tokio::sync::Mutex::new(candidate_rx));
+            let mut next_attempt: Option<NounSlab> = None;
+            let mut current_attempt: tokio::task::JoinSet<()> = tokio::task::JoinSet::new();
+            let mut handle = handle;
 
-            // Pre-load hot state once - this is read-only and can be shared
-            let hot_state = Arc::new(zkvm_jetpack::hot::produce_prover_hot_state());
-
-            // Start mining worker pool
-            let mut mining_workers = JoinSet::new();
-            
-            for worker_id in 0..mining_threads {
-                let worker_rx = candidate_rx.clone();
-                let (worker_handle, _) = handle.dup();
-                let worker_hot_state = hot_state.clone();
-                
-                mining_workers.spawn(mining_worker(
-                    worker_id,
-                    worker_hot_state,
-                    worker_rx,
-                    worker_handle,
-                ));
-            }
-
-            // Main loop for receiving mining candidates
             loop {
                 tokio::select! {
                     effect_res = handle.next_effect() => {
@@ -189,40 +167,28 @@ pub fn create_mining_driver(
                                 slab.copy_into(effect_cell.tail());
                                 slab
                             };
-                            
-                            // Try to send to worker pool, drop if queue is full
-                            match candidate_tx.try_send(candidate_slab) {
-                                Ok(_) => {},
-                                Err(mpsc::error::TrySendError::Full(_)) => {
-                                    warn!("Mining queue full, dropping candidate");
-                                }
-                                Err(e) => {
-                                    warn!("Error sending candidate to mining pool: {:?}", e);
-                                }
+                            if !current_attempt.is_empty() {
+                                next_attempt = Some(candidate_slab);
+                            } else {
+                                let (new_handle, attempt_handle) = handle.dup();
+                                handle = new_handle;
+                                let res_clone = resources.clone();
+                                current_attempt.spawn(mining_attempt_cached(candidate_slab, attempt_handle, res_clone));
                             }
                         }
                     },
-                    // Monitor worker health
-                    Some(res) = mining_workers.join_next() => {
-                        match res {
-                            Ok(worker_id) => {
-                                warn!("Mining worker {} terminated, restarting", worker_id);
-                                // Restart the worker
-                                let worker_rx = candidate_rx.clone();
-                                let (worker_handle, _) = handle.dup();
-                                let worker_hot_state = hot_state.clone();
-                                
-                                mining_workers.spawn(mining_worker(
-                                    worker_id,
-                                    worker_hot_state,
-                                    worker_rx,
-                                    worker_handle,
-                                ));
-                            }
-                            Err(e) => {
-                                warn!("Mining worker panicked: {:?}", e);
-                            }
+                    mining_attempt_res = current_attempt.join_next(), if !current_attempt.is_empty() => {
+                        if let Some(Err(e)) = mining_attempt_res {
+                            warn!("Error during mining attempt: {e:?}");
                         }
+                        let Some(candidate_slab) = next_attempt else {
+                            continue;
+                        };
+                        next_attempt = None;
+                        let (new_handle, attempt_handle) = handle.dup();
+                        handle = new_handle;
+                        let res_clone = resources.clone();
+                        current_attempt.spawn(mining_attempt_cached(candidate_slab, attempt_handle, res_clone));
                     }
                 }
             }
@@ -230,60 +196,20 @@ pub fn create_mining_driver(
     })
 }
 
-// Mining worker that processes candidates from the queue
-async fn mining_worker(
-    worker_id: usize,
-    hot_state: Arc<Vec<nockvm::jets::hot::HotEntry>>,
-    candidate_rx: Arc<tokio::sync::Mutex<mpsc::Receiver<NounSlab>>>,
-    handle: NockAppHandle,
-) -> usize {
-    info!("Mining worker {} starting, initializing kernel...", worker_id);
-    
-    // Each worker gets its own kernel instance and resources
-    let resources = match initialize_mining_resources_for_worker(worker_id, &hot_state).await {
-        Ok(res) => res,
-        Err(e) => {
-            warn!("Failed to initialize mining resources for worker {}: {:?}", worker_id, e);
-            return worker_id;
-        }
-    };
-    
-    info!("Mining worker {} initialized successfully", worker_id);
-    
-    loop {
-        // Wait for next candidate
-        let candidate = {
-            let mut rx = candidate_rx.lock().await;
-            match rx.recv().await {
-                Some(c) => c,
-                None => {
-                    warn!("Mining worker {} channel closed", worker_id);
-                    return worker_id;
-                }
-            }
-        };
-        
-        // Process the mining attempt with this worker's kernel
-        match mining_attempt_with_resources(candidate, &handle, &resources, worker_id).await {
-            Ok(_) => {},
-            Err(e) => {
-                warn!("Mining attempt failed for worker {}: {:?}", worker_id, e);
-            }
-        }
-    }
-}
-
-// Initialize mining resources for a specific worker
-async fn initialize_mining_resources_for_worker(
-    worker_id: usize, 
-    hot_state: &[nockvm::jets::hot::HotEntry]
-) -> Result<MiningResources, Box<dyn std::error::Error>> {
+// Initialize mining resources once and cache them
+async fn initialize_mining_resources() -> Result<MiningResources, Box<dyn std::error::Error>> {
     let start = std::time::Instant::now();
     
-    let snapshot_dir = tokio::task::spawn_blocking(move || {
+    let snapshot_dir = tokio::task::spawn_blocking(|| {
         tempdir().expect("Failed to create temporary directory")
     })
     .await?;
+    
+    // Use parallel hot state if available for better performance
+    #[cfg(feature = "parallel-mining")]
+    let hot_state = zkvm_jetpack::hot::produce_prover_hot_state_parallel();
+    #[cfg(not(feature = "parallel-mining"))]
+    let hot_state = zkvm_jetpack::hot::produce_prover_hot_state();
     
     let snapshot_path_buf = snapshot_dir.path().to_path_buf();
     let jam_paths = JamPaths::new(&snapshot_path_buf);
@@ -292,13 +218,13 @@ async fn initialize_mining_resources_for_worker(
         snapshot_path_buf.clone(),
         jam_paths,
         KERNEL,
-        hot_state,
+        &hot_state,
         false,
     )
     .await?;
     
     let duration = start.elapsed();
-    info!("Worker {} initialized kernel in {:?}", worker_id, duration);
+    info!("Kernel initialized in {:?}", duration);
     
     Ok(MiningResources {
         kernel,
@@ -306,22 +232,26 @@ async fn initialize_mining_resources_for_worker(
     })
 }
 
-// Process mining attempt with pre-initialized resources
-async fn mining_attempt_with_resources(
+// Optimized mining attempt using cached resources
+pub async fn mining_attempt_cached(
     candidate: NounSlab,
-    handle: &NockAppHandle,
-    resources: &MiningResources,
-    worker_id: usize,
-) -> Result<(), Box<dyn std::error::Error>> {
+    handle: NockAppHandle,
+    resources: Arc<MiningResources>,
+) -> () {
     let start = std::time::Instant::now();
     
-    // Use this worker's kernel
-    let effects_slab = resources.kernel
+    let effects_slab = match resources.kernel
         .poke(MiningWire::Candidate.to_wire(), candidate)
-        .await?;
+        .await {
+        Ok(slab) => slab,
+        Err(e) => {
+            warn!("Mining attempt failed: {:?}", e);
+            return;
+        }
+    };
     
     let duration = start.elapsed();
-    info!("Worker {} completed mining attempt in {:?}", worker_id, duration);
+    info!("Completed mining attempt in {:?}", duration);
     
     for effect in effects_slab.to_vec() {
         let Ok(effect_cell) = (unsafe { effect.root().as_cell() }) else {
@@ -331,15 +261,13 @@ async fn mining_attempt_with_resources(
         if effect_cell.head().eq_bytes("command") {
             handle
                 .poke(MiningWire::Mined.to_wire(), effect)
-                .await?;
+                .await
+                .expect("Could not poke nockchain with mined PoW");
         }
     }
-    
-    Ok(())
 }
 
-// Keep the original function for backward compatibility but mark as deprecated
-#[deprecated(note = "Use the parallel mining worker pool instead")]
+// Original function kept for backward compatibility
 pub async fn mining_attempt(candidate: NounSlab, handle: NockAppHandle) -> () {
     let snapshot_dir =
         tokio::task::spawn_blocking(|| tempdir().expect("Failed to create temporary directory"))
