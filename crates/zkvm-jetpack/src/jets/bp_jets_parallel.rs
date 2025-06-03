@@ -28,7 +28,11 @@ pub fn init_mining_thread_pool() {
     let threads = std::env::var("MINING_THREADS")
         .ok()
         .and_then(|s| s.parse().ok())
-        .unwrap_or_else(|| num_cpus::get());
+        .unwrap_or_else(|| {
+            std::thread::available_parallelism()
+                .map(|n| n.get())
+                .unwrap_or(4)
+        });
     
     MINING_THREADS.store(threads, Ordering::Relaxed);
     
@@ -44,7 +48,9 @@ pub fn get_mining_threads() -> usize {
     let threads = MINING_THREADS.load(Ordering::Relaxed);
     if threads == 0 {
         // Not initialized yet, use default
-        num_cpus::get()
+        std::thread::available_parallelism()
+            .map(|n| n.get())
+            .unwrap_or(4)
     } else {
         threads
     }
