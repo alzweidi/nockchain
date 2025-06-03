@@ -9,7 +9,7 @@
 use nockvm::interpreter::Context;
 use nockvm::jets::util::slot;
 use nockvm::jets::Result;
-use nockvm::noun::{Atom, IndirectAtom, Noun};
+use nockvm::noun::{IndirectAtom, Noun};
 use rayon::prelude::*;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -18,7 +18,6 @@ use crate::form::math::bpow;
 use crate::form::poly::*;
 use crate::hand::handle::*;
 use crate::jets::utils::jet_err;
-use crate::noun::noun_ext::NounExt;
 
 // Global thread pool configuration
 static MINING_THREADS: AtomicUsize = AtomicUsize::new(0);
@@ -151,7 +150,7 @@ pub fn bp_hadamard_parallel_jet(context: &mut Context, subject: Noun) -> Result 
             .zip(bp_poly.0.par_chunks(chunk_size).zip(bq_poly.0.par_chunks(chunk_size)))
             .for_each(|(res_chunk, (a_chunk, b_chunk))| {
                 for ((r, a), b) in res_chunk.iter_mut().zip(a_chunk.iter()).zip(b_chunk.iter()) {
-                    *r = a.mul(b);
+                    *r = *a * *b;
                 }
             });
     } else {
@@ -201,23 +200,28 @@ fn bp_ntt_parallel(bp: &[Belt], root: &Belt) -> Vec<Belt> {
     // Parallel bit-reversal permutation
     let threads = get_mining_threads();
     if n >= 1024 && threads > 1 {
-        x.par_chunks_mut(n / threads)
-            .enumerate()
-            .for_each(|(chunk_idx, chunk)| {
-                let chunk_start = chunk_idx * (n / threads);
-                for (i, val) in chunk.iter_mut().enumerate() {
-                    let k = (chunk_start + i) as u32;
-                    let rk = bitreverse(k, log_n);
-                    if k < rk {
-                        // Need to handle the swap carefully to avoid race conditions
-                        // This is safe because bitreverse is bijective
-                        unsafe {
-                            let x_ptr = x.as_mut_ptr();
-                            std::ptr::swap(x_ptr.add(k as usize), x_ptr.add(rk as usize));
-                        }
+        // Create a vector to track which indices have been swapped
+        let swapped = std::sync::Mutex::new(vec![false; n]);
+        
+        (0..n).into_par_iter().for_each(|k| {
+            let k = k as u32;
+            let rk = bitreverse(k, log_n);
+            if k < rk {
+                let mut swapped_guard = swapped.lock().unwrap();
+                if !swapped_guard[k as usize] && !swapped_guard[rk as usize] {
+                    swapped_guard[k as usize] = true;
+                    swapped_guard[rk as usize] = true;
+                    drop(swapped_guard);
+                    
+                    // Perform the swap - this is safe because we've guaranteed
+                    // no other thread will touch these indices
+                    unsafe {
+                        let x_ptr = x.as_mut_ptr();
+                        std::ptr::swap(x_ptr.add(k as usize), x_ptr.add(rk as usize));
                     }
                 }
-            });
+            }
+        });
     } else {
         // Sequential bit reversal for small inputs
         for k in 0..n as u32 {
