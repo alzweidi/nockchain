@@ -1,5 +1,6 @@
 use either::Either::*;
 use nockvm::jets::hot::{HotEntry, K_138};
+use tracing::info;
 
 use crate::jets::base_jets::*;
 use crate::jets::bp_jets::*;
@@ -25,6 +26,7 @@ pub fn produce_prover_hot_state() -> Vec<HotEntry> {
     // Initialize the thread pool on first use
     static INIT: std::sync::Once = std::sync::Once::new();
     INIT.call_once(|| {
+        info!("Initializing parallel mining system...");
         bp_jets_parallel::init_mining_thread_pool();
     });
     
@@ -33,6 +35,7 @@ pub fn produce_prover_hot_state() -> Vec<HotEntry> {
     
     // Use parallel polynomial jets for optimal performance
     jets.extend(bp_jets_parallel::registration::PARALLEL_POLY_JETS);
+    info!("Loaded {} parallel polynomial jets", bp_jets_parallel::registration::PARALLEL_POLY_JETS.len());
     
     jets.extend(CURVE_JETS);
     jets.extend(ZTD_JETS);
@@ -40,6 +43,7 @@ pub fn produce_prover_hot_state() -> Vec<HotEntry> {
     jets.extend(XTRA_JETS);
     jets.extend(EXTENSION_FIELD_JETS);
 
+    info!("Total jets loaded: {}", jets.len());
     jets
 }
 
