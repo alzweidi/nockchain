@@ -209,34 +209,20 @@ fn bp_ntt_parallel(bp: &[Belt], root: &Belt) -> Vec<Belt> {
         // Create a permuted copy in parallel
         let mut x_permuted = vec![Belt(0); n];
         
-        // For small sizes, use simpler parallelization
-        if n < 256 {
-            // Use slice-based approach to avoid raw pointer issues
-            let x_ref = &x;
-            let x_permuted_ptr = x_permuted.as_mut_ptr();
-            
-            // Simple parallel copy with bit reversal
-            (0..n).into_par_iter().for_each(move |k| {
-                let rk = bitreverse(k as u32, log_n) as usize;
-                let value = x_ref[rk];
-                unsafe {
-                    // Each thread writes to a unique index, so this is safe
-                    *x_permuted_ptr.add(k) = value;
+        // Use parallel chunks for bit reversal
+        let chunk_size = (n + threads - 1) / threads;
+        x_permuted.par_chunks_mut(chunk_size)
+            .enumerate()
+            .for_each(|(chunk_idx, chunk)| {
+                let chunk_start = chunk_idx * chunk_size;
+                for (i, val) in chunk.iter_mut().enumerate() {
+                    let k = chunk_start + i;
+                    if k < n {
+                        let rk = bitreverse(k as u32, log_n) as usize;
+                        *val = x[rk];
+                    }
                 }
             });
-        } else {
-            // Original chunked approach for larger sizes
-            x_permuted.par_chunks_mut(n / threads)
-                .enumerate()
-                .for_each(|(chunk_idx, chunk)| {
-                    let chunk_start = chunk_idx * (n / threads);
-                    for (i, val) in chunk.iter_mut().enumerate() {
-                        let k = (chunk_start + i) as u32;
-                        let rk = bitreverse(k, log_n);
-                        *val = x[rk as usize];
-                    }
-                });
-        }
         
         // Replace x with the permuted version
         x = x_permuted;
@@ -257,31 +243,27 @@ fn bp_ntt_parallel(bp: &[Belt], root: &Belt) -> Vec<Belt> {
         
         // Parallelize butterfly operations within each stage
         if m >= 8 && threads > 1 {  // Lowered from 64 to 8
-            // Get a raw pointer that we'll use for all threads
-            let x_ptr = x.as_mut_ptr();
+            // Each group processes 2*m elements
+            let group_size = 2 * m;
+            let num_groups = n / group_size;
             
-            // Process groups in parallel
-            let num_groups = n / (2 * m);
-            (0..num_groups).into_par_iter().for_each(move |group| {
-                let k = group * 2 * m;
-                let mut w = Belt(1);
-                
-                for j in 0..m {
-                    let idx1 = k + j;
-                    let idx2 = k + j + m;
-                    
-                    // Safe because each thread works on disjoint indices
-                    unsafe {
-                        let u = *x_ptr.add(idx1);
-                        let v = *x_ptr.add(idx2) * w;
+            // Process groups in parallel using chunks
+            x.par_chunks_mut(group_size)
+                .for_each(|group_slice| {
+                    let mut w = Belt(1);
+                    for j in 0..m {
+                        let idx1 = j;
+                        let idx2 = j + m;
                         
-                        *x_ptr.add(idx1) = u + v;
-                        *x_ptr.add(idx2) = u - v;
+                        let u = group_slice[idx1];
+                        let v = group_slice[idx2] * w;
+                        
+                        group_slice[idx1] = u + v;
+                        group_slice[idx2] = u - v;
+                        
+                        w = w * w_m;
                     }
-                    
-                    w = w * w_m;
-                }
-            });
+                });
         } else {
             // Sequential processing for small stages
             let mut k = 0;
