@@ -121,8 +121,8 @@ pub fn bpmul_parallel_jet(context: &mut Context, subject: Noun) -> Result {
     let (res_atom, res_poly): (IndirectAtom, &mut [Belt]) =
         new_handle_mut_slice(&mut context.stack, Some(res_len));
 
-    // Use parallel FFT-based multiplication for large polynomials
-    if res_len > 64 {  // Threshold for when parallel is beneficial
+    // Use parallel FFT-based multiplication for polynomials larger than threshold
+    if res_len > 16 {  // Lowered from 64 to 16
         bpmul_fft_parallel(bp_poly.0, bq_poly.0, res_poly)?;
     } else {
         bpmul(bp_poly.0, bq_poly.0, res_poly);
@@ -149,7 +149,7 @@ pub fn bp_hadamard_parallel_jet(context: &mut Context, subject: Noun) -> Result 
     
     // Parallelize element-wise multiplication for large vectors
     let threads = get_mining_threads();
-    if res_len > 1024 && threads > 1 {
+    if res_len > 32 && threads > 1 {  // Lowered from 1024 to 32
         // Use parallel chunks for better cache locality
         let chunk_size = (res_len + threads - 1) / threads;
         res_poly.par_chunks_mut(chunk_size)
@@ -205,20 +205,34 @@ fn bp_ntt_parallel(bp: &[Belt], root: &Belt) -> Vec<Belt> {
     
     // Parallel bit-reversal permutation
     let threads = get_mining_threads();
-    if n >= 1024 && threads > 1 {
+    if n >= 32 && threads > 1 {  // Lowered from 1024 to 32
         // Create a permuted copy in parallel
         let mut x_permuted = vec![Belt(0); n];
         
-        x_permuted.par_chunks_mut(n / threads)
-            .enumerate()
-            .for_each(|(chunk_idx, chunk)| {
-                let chunk_start = chunk_idx * (n / threads);
-                for (i, val) in chunk.iter_mut().enumerate() {
-                    let k = (chunk_start + i) as u32;
-                    let rk = bitreverse(k, log_n);
-                    *val = x[rk as usize];
+        // For small sizes, use simpler parallelization
+        if n < 256 {
+            // Simple parallel copy with bit reversal
+            (0..n).into_par_iter().for_each(|k| {
+                let rk = bitreverse(k as u32, log_n);
+                unsafe {
+                    let src = x.as_ptr().add(rk as usize);
+                    let dst = x_permuted.as_mut_ptr().add(k);
+                    *dst = *src;
                 }
             });
+        } else {
+            // Original chunked approach for larger sizes
+            x_permuted.par_chunks_mut(n / threads)
+                .enumerate()
+                .for_each(|(chunk_idx, chunk)| {
+                    let chunk_start = chunk_idx * (n / threads);
+                    for (i, val) in chunk.iter_mut().enumerate() {
+                        let k = (chunk_start + i) as u32;
+                        let rk = bitreverse(k, log_n);
+                        *val = x[rk as usize];
+                    }
+                });
+        }
         
         // Replace x with the permuted version
         x = x_permuted;
@@ -238,7 +252,7 @@ fn bp_ntt_parallel(bp: &[Belt], root: &Belt) -> Vec<Belt> {
         let w_m = bpow(root.0, (n / (2 * m)) as u64).into();
         
         // Parallelize butterfly operations within each stage
-        if m >= 64 && threads > 1 {
+        if m >= 8 && threads > 1 {  // Lowered from 64 to 8
             // Process groups in parallel
             let num_groups = n / (2 * m);
             (0..num_groups).into_par_iter().for_each(|group| {
@@ -309,7 +323,7 @@ fn bpmul_fft_parallel(a: &[Belt], b: &[Belt], result: &mut [Belt]) -> std::resul
     // Parallel pointwise multiplication
     let mut c_fft = vec![Belt(0); padded_len];
     let threads = get_mining_threads();
-    if padded_len >= 1024 && threads > 1 {
+    if padded_len >= 32 && threads > 1 {  // Lowered from 1024 to 32
         c_fft.par_chunks_mut(padded_len / threads)
             .zip(a_fft.par_chunks(padded_len / threads).zip(b_fft.par_chunks(padded_len / threads)))
             .for_each(|(c_chunk, (a_chunk, b_chunk))| {
