@@ -245,7 +245,7 @@ fn bp_ntt_parallel(bp: &[Belt], root: &Belt) -> Vec<Belt> {
         if m >= 8 && threads > 1 {  // Lowered from 64 to 8
             // Each group processes 2*m elements
             let group_size = 2 * m;
-            let num_groups = n / group_size;
+            let _num_groups = n / group_size;
             
             // Process groups in parallel using chunks
             x.par_chunks_mut(group_size)
