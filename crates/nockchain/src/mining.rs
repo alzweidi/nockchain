@@ -175,8 +175,11 @@ pub fn create_mining_driver(
             }
 
             if !mine {
+                info!("Mining is disabled (--mine flag not set)");
                 return Ok(());
             }
+
+            info!("Mining driver starting initialization...");
 
             // Determine total thread pool size from environment variable
             let total_threads = std::env::var("MINING_THREADS")
@@ -208,6 +211,7 @@ pub fn create_mining_driver(
             let mut handle = handle; // Make handle mutable for reassignment
             
             for worker_id in 0..worker_count {
+                info!("Spawning mining worker {}", worker_id);
                 let worker_rx = candidate_rx.clone();
                 let (new_handle, worker_handle) = handle.dup();
                 handle = new_handle;  // Reassign handle for next iteration
@@ -218,6 +222,10 @@ pub fn create_mining_driver(
                     worker_handle,
                 ));
             }
+
+            info!("All {} mining workers spawned, waiting for mining candidates...", worker_count);
+
+            let mut candidates_received = 0u64;
 
             loop {
                 tokio::select! {
@@ -232,6 +240,9 @@ pub fn create_mining_driver(
                         };
 
                         if effect_cell.head().eq_bytes("mine") {
+                            candidates_received += 1;
+                            info!("Received mining candidate #{}", candidates_received);
+                            
                             let candidate_slab = {
                                 let mut slab = NounSlab::new();
                                 slab.copy_into(effect_cell.tail());
@@ -240,7 +251,9 @@ pub fn create_mining_driver(
                             
                             // Try to send to worker pool
                             match candidate_tx.try_send(candidate_slab) {
-                                Ok(_) => {},
+                                Ok(_) => {
+                                    info!("Mining candidate #{} sent to worker pool", candidates_received);
+                                },
                                 Err(mpsc::error::TrySendError::Full(_)) => {
                                     warn!("Mining queue full, dropping candidate");
                                 }
@@ -248,6 +261,8 @@ pub fn create_mining_driver(
                                     warn!("Error sending candidate to mining pool: {:?}", e);
                                 }
                             }
+                        } else {
+                            info!("Received non-mining effect: {}", effect_cell.head());
                         }
                     },
                     // Monitor worker health and restart if needed
@@ -326,6 +341,8 @@ async fn mining_attempt_with_worker(
 ) -> () {
     let start = std::time::Instant::now();
     
+    info!("Worker {} starting mining attempt...", worker_id);
+    
     let effects_slab = match resources.kernel
         .poke(MiningWire::Candidate.to_wire(), candidate)
         .await {
@@ -345,6 +362,7 @@ async fn mining_attempt_with_worker(
             continue;
         };
         if effect_cell.head().eq_bytes("command") {
+            info!("Worker {} found valid proof!", worker_id);
             handle
                 .poke(MiningWire::Mined.to_wire(), effect)
                 .await
@@ -357,6 +375,8 @@ async fn mining_attempt_with_worker(
 async fn initialize_mining_resources() -> Result<MiningResources, Box<dyn std::error::Error>> {
     let start = std::time::Instant::now();
     
+    info!("Initializing mining resources with parallel support...");
+    
     let snapshot_dir = tokio::task::spawn_blocking(|| {
         tempdir().expect("Failed to create temporary directory")
     })
@@ -364,6 +384,7 @@ async fn initialize_mining_resources() -> Result<MiningResources, Box<dyn std::e
     
     // Always use parallel hot state for optimal performance
     let hot_state = zkvm_jetpack::hot::produce_prover_hot_state();
+    info!("Parallel hot state initialized with {} jets", hot_state.len());
     
     let snapshot_path_buf = snapshot_dir.path().to_path_buf();
     let jam_paths = JamPaths::new(&snapshot_path_buf);
