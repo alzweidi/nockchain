@@ -211,12 +211,16 @@ fn bp_ntt_parallel(bp: &[Belt], root: &Belt) -> Vec<Belt> {
         
         // For small sizes, use simpler parallelization
         if n < 256 {
+            // Get raw pointers for parallel access
+            let src_ptr = x.as_ptr();
+            let dst_ptr = x_permuted.as_mut_ptr();
+            
             // Simple parallel copy with bit reversal
             (0..n).into_par_iter().for_each(|k| {
                 let rk = bitreverse(k as u32, log_n);
                 unsafe {
-                    let src = x.as_ptr().add(rk as usize);
-                    let dst = x_permuted.as_mut_ptr().add(k);
+                    let src = src_ptr.add(rk as usize);
+                    let dst = dst_ptr.add(k);
                     *dst = *src;
                 }
             });
