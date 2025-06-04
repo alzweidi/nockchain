@@ -8,6 +8,7 @@ use crate::jets::cheetah_jets::*;
 use crate::jets::crypto_jets::*;
 use crate::jets::fext_jets::*;
 use crate::jets::mary_jets::*;
+use crate::jets::table_jets::*;
 use crate::jets::tip5_jets::*;
 use crate::jets::verifier_jets::*;
 use crate::jets::mega_jets::*;
@@ -36,6 +37,7 @@ pub fn produce_prover_hot_state() -> Vec<HotEntry> {
     
     jets.extend(CURVE_JETS);
     jets.extend(ZTD_JETS);
+    jets.extend(TABLE_JETS);
     jets.extend(KEYGEN_JETS);
     jets.extend(XTRA_JETS);
     jets.extend(EXTENSION_FIELD_JETS);
@@ -47,6 +49,34 @@ pub fn produce_prover_hot_state() -> Vec<HotEntry> {
 pub fn produce_prover_hot_state_parallel() -> Vec<HotEntry> {
     produce_prover_hot_state()
 }
+
+pub const TABLE_JETS: &[HotEntry] = &[
+    (
+        &[
+            K_138,
+            Left(b"one"),
+            Left(b"two"),
+            Left(b"tri"),
+            Left(b"qua"),
+            Left(b"pen"),
+            Left(b"zeke"),
+            Left(b"ext-field"),
+            Left(b"misc-lib"),
+            Left(b"proof-lib"),
+            Left(b"utils"),
+            Left(b"fri"),
+            Left(b"table-lib"),
+            Left(b"stark-core"),
+            Left(b"fock-core"),
+            Left(b"pow"),
+            Left(b"stark-engine"),
+            Left(b"stark-prover"),
+            Left(b"build-table-dats"),
+        ],
+        1,
+        build_table_dats_jet,
+    ),
+];
 
 pub const XTRA_JETS: &[HotEntry] = &[
     (
