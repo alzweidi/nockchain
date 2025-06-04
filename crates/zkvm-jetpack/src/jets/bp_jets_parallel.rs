@@ -211,17 +211,17 @@ fn bp_ntt_parallel(bp: &[Belt], root: &Belt) -> Vec<Belt> {
         
         // For small sizes, use simpler parallelization
         if n < 256 {
-            // Get raw pointers for parallel access
-            let src_ptr = x.as_ptr();
-            let dst_ptr = x_permuted.as_mut_ptr();
+            // Use slice-based approach to avoid raw pointer issues
+            let x_ref = &x;
+            let x_permuted_ptr = x_permuted.as_mut_ptr();
             
             // Simple parallel copy with bit reversal
-            (0..n).into_par_iter().for_each(|k| {
-                let rk = bitreverse(k as u32, log_n);
+            (0..n).into_par_iter().for_each(move |k| {
+                let rk = bitreverse(k as u32, log_n) as usize;
+                let value = x_ref[rk];
                 unsafe {
-                    let src = src_ptr.add(rk as usize);
-                    let dst = dst_ptr.add(k);
-                    *dst = *src;
+                    // Each thread writes to a unique index, so this is safe
+                    *x_permuted_ptr.add(k) = value;
                 }
             });
         } else {
@@ -257,9 +257,12 @@ fn bp_ntt_parallel(bp: &[Belt], root: &Belt) -> Vec<Belt> {
         
         // Parallelize butterfly operations within each stage
         if m >= 8 && threads > 1 {  // Lowered from 64 to 8
+            // Get a raw pointer that we'll use for all threads
+            let x_ptr = x.as_mut_ptr();
+            
             // Process groups in parallel
             let num_groups = n / (2 * m);
-            (0..num_groups).into_par_iter().for_each(|group| {
+            (0..num_groups).into_par_iter().for_each(move |group| {
                 let k = group * 2 * m;
                 let mut w = Belt(1);
                 
@@ -269,7 +272,6 @@ fn bp_ntt_parallel(bp: &[Belt], root: &Belt) -> Vec<Belt> {
                     
                     // Safe because each thread works on disjoint indices
                     unsafe {
-                        let x_ptr = x.as_ptr() as *mut Belt;
                         let u = *x_ptr.add(idx1);
                         let v = *x_ptr.add(idx2) * w;
                         
