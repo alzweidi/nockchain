@@ -1,4 +1,3 @@
-/// TESTING DO NOT RUN THIS WILL BE BLOODSHED. LOL.
 /// Table building jets for STARK proof generation
 /// 
 /// This module jets the table building operations which are a major bottleneck
@@ -8,9 +7,9 @@
 /// Future optimization: Add parallelization for additional speedup.
 
 use nockvm::interpreter::Context;
-use nockvm::jets::util::{slot, tail};
+use nockvm::jets::util::slot;
 use nockvm::jets::Result;
-use nockvm::noun::{Cell, IndirectAtom, Noun, D, T};
+use nockvm::noun::{Noun, D, T};
 use nockvm::mem::NockStack;
 
 use crate::jets::utils::jet_err;
@@ -90,7 +89,7 @@ fn build_compute_table(context: &mut Context, return_data: Noun) -> Result {
     let verifier_funcs = D(0); // Placeholder
     
     // table-dat is a triple: [table-mary table-funcs verifier-funcs]
-    T(&mut context.stack, &[table_mary, table_funcs, verifier_funcs])
+    Ok(T(&mut context.stack, &[table_mary, table_funcs, verifier_funcs]))
 }
 
 /// Build the table-mary for compute table
@@ -121,7 +120,7 @@ fn create_compute_header(stack: &mut NockStack) -> Result {
     let num_randomizers = D(1);
     
     // Build header structure
-    T(stack, &[
+    Ok(T(stack, &[
         name,
         T(stack, &[
             prime,
@@ -139,7 +138,7 @@ fn create_compute_header(stack: &mut NockStack) -> Result {
                 ])
             ])
         ])
-    ])
+    ]))
 }
 
 /// Process compute queue to build rows
@@ -150,7 +149,7 @@ fn process_compute_queue(context: &mut Context, queue: Noun) -> Result {
     
     // Process queue entries
     while let Ok(cell) = unsafe { current_queue.as_cell() } {
-        if cell.head().raw_equals(D(0)) {
+        if cell.head().raw_equals(&D(0)) {
             break; // End of queue
         }
         
@@ -192,7 +191,7 @@ fn process_compute_queue(context: &mut Context, queue: Noun) -> Result {
         
         // Skip to next entry
         for _ in 0..skip {
-            current_queue = tail(current_queue)?;
+            current_queue = current_queue.as_cell()?.tail();
         }
     }
     
@@ -265,7 +264,7 @@ fn build_memory_table(context: &mut Context, return_data: Noun) -> Result {
     let table_funcs = D(0);
     let verifier_funcs = D(0);
     
-    T(&mut context.stack, &[empty_mary, table_funcs, verifier_funcs])
+    Ok(T(&mut context.stack, &[empty_mary, table_funcs, verifier_funcs]))
 }
 
 /// Create header for memory table
@@ -278,7 +277,7 @@ fn create_memory_header(stack: &mut NockStack) -> Result {
     let full_width = D(13);
     let num_randomizers = D(1);
     
-    T(stack, &[
+    Ok(T(stack, &[
         name,
         T(stack, &[
             prime,
@@ -296,7 +295,7 @@ fn create_memory_header(stack: &mut NockStack) -> Result {
                 ])
             ])
         ])
-    ])
+    ]))
 }
 
 #[cfg(test)]
