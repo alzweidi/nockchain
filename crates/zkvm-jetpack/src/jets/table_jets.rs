@@ -119,26 +119,16 @@ fn create_compute_header(stack: &mut NockStack) -> Result {
     let full_width = D(74); // Total columns
     let num_randomizers = D(1);
     
-    // Build header structure
-    Ok(T(stack, &[
-        name,
-        T(stack, &[
-            prime,
-            T(stack, &[
-                base_width,
-                T(stack, &[
-                    ext_width,
-                    T(stack, &[
-                        mega_ext_width,
-                        T(stack, &[
-                            full_width,
-                            T(stack, &[num_randomizers, D(0)])
-                        ])
-                    ])
-                ])
-            ])
-        ])
-    ]))
+    // Build header structure step by step to avoid multiple mutable borrows
+    let inner6 = T(stack, &[num_randomizers, D(0)]);
+    let inner5 = T(stack, &[full_width, inner6]);
+    let inner4 = T(stack, &[mega_ext_width, inner5]);
+    let inner3 = T(stack, &[ext_width, inner4]);
+    let inner2 = T(stack, &[base_width, inner3]);
+    let inner1 = T(stack, &[prime, inner2]);
+    let header = T(stack, &[name, inner1]);
+    
+    Ok(header)
 }
 
 /// Process compute queue to build rows
@@ -148,8 +138,8 @@ fn process_compute_queue(context: &mut Context, queue: Noun) -> Result {
     let mut row_count = 0;
     
     // Process queue entries
-    while let Ok(cell) = unsafe { current_queue.as_cell() } {
-        if cell.head().raw_equals(&D(0)) {
+    while let Ok(cell) = current_queue.as_cell() {
+        if unsafe { cell.head().raw_equals(&D(0)) } {
             break; // End of queue
         }
         
@@ -158,7 +148,7 @@ fn process_compute_queue(context: &mut Context, queue: Noun) -> Result {
         let f = slot(current_queue, 2)?;
         
         // Determine operation type
-        let op = if let Ok(f_cell) = unsafe { f.as_cell() } {
+        let op = if let Ok(f_cell) = f.as_cell() {
             // If f is a cell, check its head
             if let Ok(head_atom) = f_cell.head().as_atom() {
                 head_atom.as_u64().unwrap_or(9) as u8
@@ -252,7 +242,7 @@ fn rows_to_mary(stack: &mut NockStack, rows: Vec<Noun>) -> Result {
 }
 
 /// Build memory table
-fn build_memory_table(context: &mut Context, return_data: Noun) -> Result {
+fn build_memory_table(context: &mut Context, _return_data: Noun) -> Result {
     eprintln!("build_table_dats_jet: Building memory table (placeholder)");
     
     // For now, return a placeholder
@@ -277,25 +267,16 @@ fn create_memory_header(stack: &mut NockStack) -> Result {
     let full_width = D(13);
     let num_randomizers = D(1);
     
-    Ok(T(stack, &[
-        name,
-        T(stack, &[
-            prime,
-            T(stack, &[
-                base_width,
-                T(stack, &[
-                    ext_width,
-                    T(stack, &[
-                        mega_ext_width,
-                        T(stack, &[
-                            full_width,
-                            T(stack, &[num_randomizers, D(0)])
-                        ])
-                    ])
-                ])
-            ])
-        ])
-    ]))
+    // Build header structure step by step to avoid multiple mutable borrows
+    let inner6 = T(stack, &[num_randomizers, D(0)]);
+    let inner5 = T(stack, &[full_width, inner6]);
+    let inner4 = T(stack, &[mega_ext_width, inner5]);
+    let inner3 = T(stack, &[ext_width, inner4]);
+    let inner2 = T(stack, &[base_width, inner3]);
+    let inner1 = T(stack, &[prime, inner2]);
+    let header = T(stack, &[name, inner1]);
+    
+    Ok(header)
 }
 
 #[cfg(test)]
