@@ -9,9 +9,8 @@
 use nockvm::interpreter::Context;
 use nockvm::jets::util::slot;
 use nockvm::jets::Result;
-use nockvm::noun::{Noun, D, T};
+use nockvm::noun::{Noun, Atom, D, T, IndirectAtom};
 use nockvm::mem::NockStack;
-use nockvm::noun::Atom;
 
 use crate::jets::utils::jet_err;
 
@@ -112,7 +111,12 @@ fn create_compute_header(stack: &mut NockStack) -> Result {
     // Header structure from compute.hoon:
     // name, prime, base-width, ext-width, mega-ext-width, full-width, num-randomizers
     
-    let name = Atom::from_value(stack, "compute").expect("Failed to create compute atom").as_noun();
+    // Create "compute" as an atom - stored as little-endian bytes
+    let compute_bytes: [u8; 7] = [0x63, 0x6f, 0x6d, 0x70, 0x75, 0x74, 0x65]; // "compute"
+    let name = unsafe {
+        IndirectAtom::new_raw_bytes_ref(stack, &compute_bytes).as_noun()
+    };
+    
     let prime = D(0xffffffff00000001); // p = 2^64 - 2^32 + 1
     let base_width = D(11); // Base columns
     let ext_width = D(57); // Extension columns  
@@ -260,7 +264,12 @@ fn build_memory_table(context: &mut Context, _return_data: Noun) -> Result {
 
 /// Create header for memory table
 fn create_memory_header(stack: &mut NockStack) -> Result {
-    let name = Atom::from_value(stack, "memory").expect("Failed to create memory atom").as_noun();
+    // Create "memory" as an atom - stored as little-endian bytes
+    let memory_bytes: [u8; 6] = [0x6d, 0x65, 0x6d, 0x6f, 0x72, 0x79]; // "memory"
+    let name = unsafe {
+        IndirectAtom::new_raw_bytes_ref(stack, &memory_bytes).as_noun()
+    };
+    
     let prime = D(0xffffffff00000001);
     let base_width = D(8); // Memory table has 8 base columns
     let ext_width = D(0); 
