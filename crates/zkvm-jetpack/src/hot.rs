@@ -1,9 +1,9 @@
 use either::Either::*;
 use nockvm::jets::hot::{HotEntry, K_138};
 
+use crate::jets::*;
 use crate::jets::base_jets::*;
-use crate::jets::bp_jets::*;
-use crate::jets::bp_jets_parallel;
+use crate::jets::bp_jets_parallel::*;
 use crate::jets::cheetah_jets::*;
 use crate::jets::crypto_jets::*;
 use crate::jets::fext_jets::*;
@@ -60,21 +60,28 @@ pub const TABLE_JETS: &[HotEntry] = &[
             Left(b"qua"),
             Left(b"pen"),
             Left(b"zeke"),
-            Left(b"ext-field"),
-            Left(b"misc-lib"),
-            Left(b"proof-lib"),
-            Left(b"utils"),
-            Left(b"fri"),
-            Left(b"table-lib"),
-            Left(b"stark-core"),
-            Left(b"fock-core"),
-            Left(b"pow"),
-            Left(b"stark-engine"),
-            Left(b"stark-prover"),
-            Left(b"build-table-dats"),
+            Left(b"compute-table"),
+            Left(b"funcs"),
+            Left(b"build"),
         ],
         1,
-        build_table_dats_jet,
+        compute_table_build_jet,
+    ),
+    (
+        &[
+            K_138,
+            Left(b"one"),
+            Left(b"two"),
+            Left(b"tri"),
+            Left(b"qua"),
+            Left(b"pen"),
+            Left(b"zeke"),
+            Left(b"memory-table"),
+            Left(b"funcs"),
+            Left(b"build"),
+        ],
+        1,
+        memory_table_build_jet,
     ),
 ];
 
