@@ -550,7 +550,7 @@
 ::
 ::
 ++  build-table-dats
-  ~/  %build-table-dats
+  ::~/  %build-table-dats
   |=  [return=fock-return override=(unit (list term))]
   ^-  (list table-dat)
   %-  sort
