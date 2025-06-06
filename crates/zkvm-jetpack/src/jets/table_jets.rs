@@ -9,7 +9,7 @@
 use nockvm::interpreter::Context;
 use nockvm::jets::util::slot;
 use nockvm::jets::Result;
-use nockvm::noun::{Noun, Atom, D, T, IndirectAtom};
+use nockvm::noun::{Noun, D, T, IndirectAtom};
 use nockvm::mem::NockStack;
 
 use crate::jets::utils::jet_err;
@@ -52,7 +52,7 @@ pub fn compute_table_build_jet(context: &mut Context, subject: Noun) -> Result {
 /// memory-table build jet
 /// 
 /// This jets the build function at hoon/common/table/prover/memory.hoon
-pub fn memory_table_build_jet(context: &mut Context, subject: Noun) -> Result {
+pub fn memory_table_build_jet(context: &mut Context, _subject: Noun) -> Result {
     eprintln!("memory_table_build_jet: Starting memory table build");
     
     // For now, implement a simple version that returns an empty table
