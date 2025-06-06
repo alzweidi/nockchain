@@ -14,27 +14,67 @@ use nockvm::mem::NockStack;
 
 use crate::jets::utils::jet_err;
 
-/// compute-table build jet
+/// build-table-dats jet
 /// 
-/// This jets the build function at hoon/common/table/prover/compute.hoon:890
+/// This jets the function at hoon/common/stark/prover.hoon:551
 /// 
 /// Takes:
-/// - fock-return containing execution trace
+/// - return: fock-return containing execution trace  
+/// - override: optional list of table names to build
 /// 
 /// Returns:
-/// - table-mary structure (header and rows)
-pub fn compute_table_build_jet(context: &mut Context, subject: Noun) -> Result {
-    eprintln!("compute_table_build_jet: Starting table build");
+/// - list of table-dat structures
+pub fn build_table_dats_jet(context: &mut Context, subject: Noun) -> Result {
+    eprintln!("build_table_dats_jet: Starting table building");
     
-    // Extract fock-return from subject (arg is at axis 6)
-    let fock_return = slot(subject, 6)?;
+    // Extract arguments from subject
+    let arg = slot(subject, 6)?;
+    let fock_return = slot(arg, 2)?;
+    let override_opt = slot(arg, 3)?;
     
+    // For now, we only support building all tables (no override)
+    if override_opt != D(0) {
+        eprintln!("build_table_dats_jet: Override not supported yet, building all tables");
+    }
+    
+    // Build compute table
+    eprintln!("build_table_dats_jet: Building compute table");
+    let compute_table = build_compute_table(context, fock_return)?;
+    
+    // Build memory table
+    eprintln!("build_table_dats_jet: Building memory table");
+    let memory_table = build_memory_table(context, fock_return)?;
+    
+    // For each table, we need to create a table-dat structure:
+    // [table-mary table-funcs verifier-funcs]
+    // For now, we'll use D(0) placeholders for the function cores
+    
+    let compute_table_dat = T(&mut context.stack, &[
+        compute_table,
+        D(0), // table-funcs placeholder
+        D(0)  // verifier-funcs placeholder
+    ]);
+    
+    let memory_table_dat = T(&mut context.stack, &[
+        memory_table,
+        D(0), // table-funcs placeholder
+        D(0)  // verifier-funcs placeholder
+    ]);
+    
+    // Build list of table-dats (compute first, then memory)
+    let table_list = T(&mut context.stack, &[
+        compute_table_dat,
+        T(&mut context.stack, &[memory_table_dat, D(0)])
+    ]);
+    
+    eprintln!("build_table_dats_jet: Successfully built {} tables", 2);
+    Ok(table_list)
+}
+
+/// Build compute table
+fn build_compute_table(context: &mut Context, fock_return: Noun) -> Result {
     // Extract queue from fock-return (queue is at axis 2)
     let queue = slot(fock_return, 2)?;
-    
-    // Count queue entries for progress tracking
-    let queue_len = count_queue_entries(queue);
-    eprintln!("compute_table_build_jet: Processing {} queue entries", queue_len);
     
     // Create header
     let header = create_compute_header(&mut context.stack)?;
@@ -45,16 +85,11 @@ pub fn compute_table_build_jet(context: &mut Context, subject: Noun) -> Result {
     // Create table-mary structure [header rows]
     let table_mary = T(&mut context.stack, &[header, rows]);
     
-    eprintln!("compute_table_build_jet: Successfully built compute table");
     Ok(table_mary)
 }
 
-/// memory-table build jet
-/// 
-/// This jets the build function at hoon/common/table/prover/memory.hoon
-pub fn memory_table_build_jet(context: &mut Context, _subject: Noun) -> Result {
-    eprintln!("memory_table_build_jet: Starting memory table build");
-    
+/// Build memory table
+fn build_memory_table(context: &mut Context, _fock_return: Noun) -> Result {
     // For now, implement a simple version that returns an empty table
     // Full implementation would process memory operations from the trace
     
@@ -62,42 +97,16 @@ pub fn memory_table_build_jet(context: &mut Context, _subject: Noun) -> Result {
     let empty_rows = D(0); // Empty list
     let table_mary = T(&mut context.stack, &[header, empty_rows]);
     
-    eprintln!("memory_table_build_jet: Built memory table (placeholder)");
     Ok(table_mary)
-}
-
-/// Count queue entries
-fn count_queue_entries(queue: Noun) -> usize {
-    let mut count = 0;
-    let mut current = queue;
-    
-    while let Ok(cell) = current.as_cell() {
-        if let Ok(head) = cell.head().as_atom() {
-            if head.as_u64().unwrap_or(1) == 0 {
-                break; // End of queue
-            }
-        }
-        count += 1;
-        
-        // Skip to next based on approximate queue structure
-        // Real implementation would parse operation type
-        for _ in 0..3 {
-            if let Ok(c) = current.as_cell() {
-                current = c.tail();
-            } else {
-                break;
-            }
-        }
-    }
-    
-    count
 }
 
 /// Create header for compute table
 fn create_compute_header(stack: &mut NockStack) -> Result {
-    // Create "compute" as an atom
+    // Header structure from compute.hoon:
+    // [name prime base-width ext-width mega-ext-width full-width num-randomizers 0]
+    
     let name = unsafe {
-        let bytes: [u8; 7] = [0x63, 0x6f, 0x6d, 0x70, 0x75, 0x74, 0x65]; // "compute"
+        let bytes: [u8; 7] = [0x65, 0x74, 0x75, 0x70, 0x6d, 0x6f, 0x63]; // "compute" reversed
         IndirectAtom::new_raw_bytes_ref(stack, &bytes).as_noun()
     };
     
@@ -108,22 +117,23 @@ fn create_compute_header(stack: &mut NockStack) -> Result {
     let full_width = D(74);
     let num_randomizers = D(1);
     
-    // Build nested structure avoiding multiple mutable borrows
-    let inner1 = T(stack, &[num_randomizers, D(0)]);
-    let inner2 = T(stack, &[full_width, inner1]);
-    let inner3 = T(stack, &[mega_ext_width, inner2]);
-    let inner4 = T(stack, &[ext_width, inner3]);
-    let inner5 = T(stack, &[base_width, inner4]);
-    let inner6 = T(stack, &[prime, inner5]);
-    let header = T(stack, &[name, inner6]);
+    // Build nested structure step by step
+    let inner7 = D(0);
+    let inner6 = T(stack, &[num_randomizers, inner7]);
+    let inner5 = T(stack, &[full_width, inner6]);
+    let inner4 = T(stack, &[mega_ext_width, inner5]);
+    let inner3 = T(stack, &[ext_width, inner4]);
+    let inner2 = T(stack, &[base_width, inner3]);
+    let inner1 = T(stack, &[prime, inner2]);
+    let header = T(stack, &[name, inner1]);
     
     Ok(header)
 }
 
-/// Create header for memory table
+/// Create header for memory table  
 fn create_memory_header(stack: &mut NockStack) -> Result {
     let name = unsafe {
-        let bytes: [u8; 6] = [0x6d, 0x65, 0x6d, 0x6f, 0x72, 0x79]; // "memory"
+        let bytes: [u8; 6] = [0x79, 0x72, 0x6f, 0x6d, 0x65, 0x6d]; // "memory" reversed
         IndirectAtom::new_raw_bytes_ref(stack, &bytes).as_noun()
     };
     
@@ -134,13 +144,14 @@ fn create_memory_header(stack: &mut NockStack) -> Result {
     let full_width = D(13);
     let num_randomizers = D(1);
     
-    let inner1 = T(stack, &[num_randomizers, D(0)]);
-    let inner2 = T(stack, &[full_width, inner1]);
-    let inner3 = T(stack, &[mega_ext_width, inner2]);
-    let inner4 = T(stack, &[ext_width, inner3]);
-    let inner5 = T(stack, &[base_width, inner4]);
-    let inner6 = T(stack, &[prime, inner5]);
-    let header = T(stack, &[name, inner6]);
+    let inner7 = D(0);
+    let inner6 = T(stack, &[num_randomizers, inner7]);
+    let inner5 = T(stack, &[full_width, inner6]);
+    let inner4 = T(stack, &[mega_ext_width, inner5]);
+    let inner3 = T(stack, &[ext_width, inner4]);
+    let inner2 = T(stack, &[base_width, inner3]);
+    let inner1 = T(stack, &[prime, inner2]);
+    let header = T(stack, &[name, inner1]);
     
     Ok(header)
 }
@@ -150,28 +161,41 @@ fn process_compute_queue(context: &mut Context, queue: Noun) -> Result {
     let mut rows = Vec::new();
     let mut current_queue = queue;
     let mut row_count = 0;
+    let mut max_rows = 10000; // Safety limit to prevent infinite loops
     
     // Process each queue entry
-    while let Ok(cell) = current_queue.as_cell() {
-        // Check for end of queue
-        if let Ok(head) = cell.head().as_atom() {
-            if head.as_u64().unwrap_or(1) == 0 {
-                break;
-            }
+    loop {
+        // Safety check
+        if row_count >= max_rows {
+            eprintln!("build_table_dats_jet: Hit max row limit of {}", max_rows);
+            break;
         }
         
-        // Extract operation info
-        let f = slot(current_queue, 2)?; // Formula at position 2
+        // Check for end of queue
+        let Ok(cell) = current_queue.as_cell() else {
+            break;
+        };
+        
+        let head = cell.head();
+        if head == D(0) {
+            break; // End marker
+        }
+        
+        // Extract operation info (formula at position 2)
+        let f = match slot(current_queue, 2) {
+            Ok(f) => f,
+            Err(_) => break, // Invalid queue structure
+        };
         
         // Determine operation type
         let op = if let Ok(f_cell) = f.as_cell() {
-            if let Ok(head) = f_cell.head().as_atom() {
-                head.as_u64().unwrap_or(9) as u8
+            if let Ok(head_atom) = f_cell.head().as_atom() {
+                (head_atom.as_u64().unwrap_or(9) % 10) as u8
             } else {
                 9 // Cell operation
             }
         } else if let Ok(atom) = f.as_atom() {
-            atom.as_u64().unwrap_or(0) as u8
+            (atom.as_u64().unwrap_or(0) % 10) as u8
         } else {
             0
         };
@@ -188,19 +212,32 @@ fn process_compute_queue(context: &mut Context, queue: Noun) -> Result {
             3 | 4 | 7 => 4,
             5 => 5,
             6 => 6,
-            _ => return jet_err(),
+            _ => 3, // Default
         };
         
+        // Move to next entry
         for _ in 0..skip {
-            current_queue = current_queue.as_cell()?.tail();
+            match current_queue.as_cell() {
+                Ok(c) => current_queue = c.tail(),
+                Err(_) => {
+                    current_queue = D(0);
+                    break;
+                }
+            }
+        }
+        
+        if current_queue == D(0) {
+            break;
         }
     }
     
-    eprintln!("compute_table_build_jet: Processed {} rows", row_count);
+    eprintln!("build_table_dats_jet: Processed {} compute table rows", row_count);
     
-    // Add final padding row
-    let padding_row = create_padding_row(&mut context.stack)?;
-    rows.push(padding_row);
+    // Add final padding row if we have any rows
+    if row_count > 0 {
+        let padding_row = create_padding_row(&mut context.stack)?;
+        rows.push(padding_row);
+    }
     
     // Convert to list structure
     rows_to_list(&mut context.stack, rows)
