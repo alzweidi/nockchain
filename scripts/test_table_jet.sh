@@ -1,29 +1,49 @@
 #!/bin/bash
-# Test script to verify table building jet works
 
-echo "Testing table building jet..."
+echo "Testing build_table_dats_jet with debug output..."
+echo "======================================"
 
-# First, build the project with the new jet
-echo "Building nockchain with table jet..."
-cargo build --release 2>&1 | grep -E "(error|warning|Finished)"
+# Set environment variables for debugging
+export RUST_LOG=debug
+export MINING_THREADS=1
+export RUST_BACKTRACE=1
 
-if [ $? -ne 0 ]; then
-    echo "Build failed!"
-    exit 1
+# Clean and rebuild
+echo "Rebuilding with latest changes..."
+cargo build --release --bin nockchain
+
+# Run with mining and filter for relevant output
+echo -e "\nRunning nockchain with mining enabled..."
+echo "Watching for jet execution and errors..."
+echo "======================================"
+
+timeout 60 cargo run --release --bin nockchain -- --mine 2>&1 | tee debug_output.log | grep -E "(build_table_dats_jet|panic|thread|DIRECT_MAX|serf)"
+
+echo -e "\n======================================"
+echo "Debug output saved to debug_output.log"
+echo "Checking for specific issues..."
+
+# Check if the jet was called
+if grep -q "build_table_dats_jet: Called" debug_output.log; then
+    echo "✓ Jet was successfully called"
+else
+    echo "✗ Jet was not called"
 fi
 
-echo "Build successful!"
+# Check for panics
+if grep -q "panic" debug_output.log; then
+    echo "✗ Panic detected - checking details..."
+    grep -A5 -B5 "panic" debug_output.log
+else
+    echo "✓ No panics detected"
+fi
 
-# Run a simple mining test to see if the jet is being called
-echo "Testing mining with table jet..."
-RUST_LOG=debug MINING_THREADS=1 timeout 30s cargo run --release --bin nockchain -- --mine 2>&1 | grep -E "(build-table-dats|table_jet|Building tables)" | head -20
+# Check for DIRECT_MAX errors
+if grep -q "DIRECT_MAX" debug_output.log; then
+    echo "✗ DIRECT_MAX error detected"
+else
+    echo "✓ No DIRECT_MAX errors"
+fi
 
-echo ""
-echo "To verify the jet is working:"
-echo "1. Look for debug output mentioning table building"
-echo "2. Compare timing with and without the jet"
-echo ""
-echo "Run this to test without the jet:"
-echo "  cargo run --release --bin nockchain -- --mine"
-echo ""
-echo "The jet should provide 2-3x speedup in the table building phase." 
+echo -e "\nFull jet output:"
+grep "build_table_dats_jet" debug_output.log || echo "No jet output found" 
