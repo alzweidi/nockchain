@@ -9,8 +9,40 @@
 use nockvm::interpreter::Context;
 use nockvm::jets::util::slot;
 use nockvm::jets::{Result, JetErr};
-use nockvm::noun::{Noun, D, T, Atom};
+use nockvm::noun::{Noun, D, T, Atom, IndirectAtom};
 use nockvm::mem::NockStack;
+
+/// Ultra-safe atom creation that always uses the allocator
+/// This avoids any possibility of DIRECT_MAX errors
+fn ultra_safe_atom(stack: &mut NockStack, value: u64) -> Noun {
+    // Always use Atom::new which handles both direct and indirect atoms correctly
+    let atom = Atom::new(stack, value);
+    eprintln!("ultra_safe_atom: Created atom for value {} (hex: {:x}), is_direct: {}", 
+             value, value, atom.is_direct());
+    atom.as_noun()
+}
+
+/// Create any atom value safely - handles strings, large numbers, etc.
+fn create_safe_atom_from_bytes(stack: &mut NockStack, bytes: &[u8]) -> Noun {
+    if bytes.is_empty() {
+        return ultra_safe_atom(stack, 0);
+    }
+    
+    // For small byte arrays that fit in a u64
+    if bytes.len() <= 8 {
+        let mut value = 0u64;
+        for (i, &byte) in bytes.iter().enumerate() {
+            value |= (byte as u64) << (i * 8);
+        }
+        return ultra_safe_atom(stack, value);
+    }
+    
+    // For larger byte arrays, create an indirect atom
+    unsafe {
+        let atom = IndirectAtom::new_raw_bytes_ref(stack, bytes);
+        atom.as_noun()
+    }
+}
 
 /// Helper function to create an atom that handles values larger than DIRECT_MAX
 fn make_atom(stack: &mut NockStack, value: u64) -> Noun {
@@ -105,10 +137,13 @@ pub fn build_table_dats_jet(context: &mut Context, subject: Noun) -> Result {
         return Err(JetErr::Punt);
     }
     
+    // Store the count before moving the vector
+    let table_count = tables.len();
+    
     // Convert vector to noun list
     let result = vec_to_list(&mut context.stack, tables)?;
     
-    eprintln!("build_table_dats_jet: Successfully built {} tables", tables.len());
+    eprintln!("build_table_dats_jet: Successfully built {} tables", table_count);
     Ok(result)
 }
 
@@ -116,7 +151,7 @@ pub fn build_table_dats_jet(context: &mut Context, subject: Noun) -> Result {
 fn create_table_dat(stack: &mut NockStack, table_mary: Noun, name: &str) -> Result {
     // For now, create a simplified table-dat structure
     // Real implementation would include padding and function references
-    let name_atom = match name {
+    let _name_atom = match name {
         "compute" => safe_d(stack, 0x636f6d70757465), // "compute" as hex
         "memory" => safe_d(stack, 0x6d656d6f7279),     // "memory" as hex
         _ => safe_d(stack, 0),
@@ -422,7 +457,7 @@ fn create_operation_row(stack: &mut NockStack, op: u8) -> Result {
     }
     
     // Build as list
-    safe_list(stack, values)
+    Ok(safe_list(stack, values))
 }
 
 /// Create padding row
@@ -436,7 +471,7 @@ fn create_padding_row(stack: &mut NockStack) -> Result {
         safe_d(stack, 0), safe_d(stack, 0), safe_d(stack, 0)
     ];
     
-    safe_list(stack, values)
+    Ok(safe_list(stack, values))
 }
 
 /// Convert vector of rows to list structure
