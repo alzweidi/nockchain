@@ -47,16 +47,10 @@ fn create_safe_atom_from_bytes(stack: &mut NockStack, bytes: &[u8]) -> Noun {
 /// Helper function to create an atom that handles values larger than DIRECT_MAX
 fn make_atom(stack: &mut NockStack, value: u64) -> Noun {
     eprintln!("make_atom: Called with value {} (hex: {:x})", value, value);
-    if value <= 0x7FFFFFFFFFFFFFFF { // DIRECT_MAX
-        eprintln!("make_atom: Value is <= DIRECT_MAX, using D()");
-        D(value)
-    } else {
-        eprintln!("make_atom: Value is > DIRECT_MAX, using Atom::new()");
-        // Create indirect atom for large values
-        let atom = Atom::new(stack, value).as_noun();
-        eprintln!("make_atom: Indirect atom created successfully");
-        atom
-    }
+    // Always use Atom::new which handles both direct and indirect atoms correctly
+    let atom = Atom::new(stack, value);
+    eprintln!("make_atom: Created atom, is_direct: {}", atom.is_direct());
+    atom.as_noun()
 }
 
 /// Safe version of D() that handles any value
@@ -248,7 +242,8 @@ fn create_compute_header(stack: &mut NockStack) -> Result {
     eprintln!("create_compute_header: Name created");
     
     // Use the actual prime value: 0xffffffff00000001
-    let prime = make_atom(stack, 0xffffffff00000001u64);
+    // This value is larger than DIRECT_MAX, so we must use Atom::new or safe_d
+    let prime = ultra_safe_atom(stack, 0xffffffff00000001u64);
     eprintln!("create_compute_header: Prime created");
     
     let base_width = safe_d(stack, 11);
@@ -279,7 +274,8 @@ fn create_memory_header(stack: &mut NockStack) -> Result {
     eprintln!("create_memory_header: Name created");
     
     // Use the actual prime value: 0xffffffff00000001
-    let prime = make_atom(stack, 0xffffffff00000001u64);
+    // This value is larger than DIRECT_MAX, so we must use Atom::new or safe_d
+    let prime = ultra_safe_atom(stack, 0xffffffff00000001u64);
     eprintln!("create_memory_header: Prime created");
     
     let base_width = safe_d(stack, 8);
