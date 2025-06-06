@@ -1,7 +1,6 @@
 use either::Either::*;
 use nockvm::jets::hot::{HotEntry, K_138};
 
-use crate::jets::*;
 use crate::jets::base_jets::*;
 use crate::jets::bp_jets::*;
 use crate::jets::bp_jets_parallel;
