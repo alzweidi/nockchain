@@ -113,7 +113,14 @@ fn create_compute_header(stack: &mut NockStack) -> Result {
         IndirectAtom::new_raw_bytes_ref(stack, &bytes).as_noun()
     };
     
-    let prime = D(0xffffffff00000001); // p = 2^64 - 2^32 + 1
+    // Create prime as IndirectAtom since it's larger than DIRECT_MAX
+    // prime = 0xffffffff00000001 = 2^64 - 2^32 + 1
+    let prime = unsafe {
+        let prime_value: u64 = 0xffffffff00000001;
+        let prime_bytes = prime_value.to_le_bytes();
+        IndirectAtom::new_raw_bytes_ref(stack, &prime_bytes).as_noun()
+    };
+    
     let base_width = D(11);
     let ext_width = D(57);
     let mega_ext_width = D(6);
@@ -140,7 +147,13 @@ fn create_memory_header(stack: &mut NockStack) -> Result {
         IndirectAtom::new_raw_bytes_ref(stack, &bytes).as_noun()
     };
     
-    let prime = D(0xffffffff00000001);
+    // Create prime as IndirectAtom since it's larger than DIRECT_MAX
+    let prime = unsafe {
+        let prime_value: u64 = 0xffffffff00000001;
+        let prime_bytes = prime_value.to_le_bytes();
+        IndirectAtom::new_raw_bytes_ref(stack, &prime_bytes).as_noun()
+    };
+    
     let base_width = D(8);
     let ext_width = D(0);
     let mega_ext_width = D(5);
