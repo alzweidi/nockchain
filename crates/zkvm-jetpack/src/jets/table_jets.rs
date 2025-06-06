@@ -6,10 +6,10 @@
 /// 
 /// Future optimization: Add parallelization for additional speedup.
 
-use nockvm::interpreter::{Context, Error};
+use nockvm::interpreter::Context;
 use nockvm::jets::util::slot;
-use nockvm::jets::Result;
-use nockvm::noun::{Noun, D, T, IndirectAtom, Atom};
+use nockvm::jets::{Result, JetErr};
+use nockvm::noun::{Noun, D, T, Atom};
 use nockvm::mem::NockStack;
 
 /// Helper function to create an atom that handles values larger than DIRECT_MAX
@@ -37,9 +37,9 @@ fn make_atom(stack: &mut NockStack, value: u64) -> Noun {
 /// 
 /// Returns:
 /// - list of table-dat structures
-pub fn build_table_dats_jet(context: &mut Context, subject: Noun) -> Result {
-    // Return Err to fall back to Hoon implementation
-    Err(Error::Deterministic)
+pub fn build_table_dats_jet(_context: &mut Context, _subject: Noun) -> Result {
+    // Return Punt to fall back to Hoon implementation
+    Err(JetErr::Punt)
 }
 
 /// Build compute table
