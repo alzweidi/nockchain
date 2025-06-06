@@ -66,11 +66,9 @@ pub fn build_table_dats_jet(context: &mut Context, subject: Noun) -> Result {
         D(0)  // verifier-funcs placeholder
     ]);
     
-    // Build list of table-dats (compute first, then memory)
-    let table_list = T(&mut context.stack, &[
-        compute_table_dat,
-        T(&mut context.stack, &[memory_table_dat, D(0)])
-    ]);
+    // Build list of table-dats step by step to avoid multiple borrows
+    let memory_list = T(&mut context.stack, &[memory_table_dat, D(0)]);
+    let table_list = T(&mut context.stack, &[compute_table_dat, memory_list]);
     
     eprintln!("build_table_dats_jet: Successfully built {} tables", 2);
     Ok(table_list)
@@ -166,7 +164,7 @@ fn process_compute_queue(context: &mut Context, queue: Noun) -> Result {
     let mut rows = Vec::new();
     let mut current_queue = queue;
     let mut row_count = 0;
-    let mut max_rows = 10000; // Safety limit to prevent infinite loops
+    let max_rows = 10000; // Safety limit to prevent infinite loops
     
     // Process each queue entry
     loop {
