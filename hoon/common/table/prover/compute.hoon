@@ -415,50 +415,7 @@
   ~/  %build
   |=  fock-meta=fock-return
   ^-  table-mary
-  =/  queue=(list *)  queue.fock-meta
-  =|  rows=(list bpoly)
-  |-  ^-  table-mary
-  ?:  =(0 (lent queue))
-    :-  header
-    %-  zing-bpolys
-    %-  flop
-    :_  rows
-    (init-bpoly [1 (reap (dec (lent basic-column-names:static:common)) 0)])
-  =|  row=row-data
-  =/  f      (snag 1 queue)
-  =.  queue  (slag 3 queue)
-  ?>  ?=(^ f)
-  =/  op     ?^(-.f %9 -.f)
-  =/  ops    (~(got by op-map) op)
-  =.  rows
-    :_  rows
-    %-  init-bpoly
-    :~  0  :: pad
-        o0.ops
-        o1.ops
-        o2.ops
-        o3.ops
-        o4.ops
-        o5.ops
-        o6.ops
-        o7.ops
-        o8.ops
-        o9.ops
-    ==
-  =.  queue
-    ?+  op  !!
-      %0   queue
-      %1   queue
-      %2   (slag 2 queue)
-      %3   (slag 1 queue)
-      %4   (slag 1 queue)
-      %5   (slag 2 queue)
-      %6   (slag 3 queue)
-      %7   (slag 1 queue)
-      %8   (slag 2 queue)
-      %9   (slag 2 queue)
-    ==
-  $
+  (^build +<)
 ::
 ++  mega-extend
   ~/  %mega-extend
