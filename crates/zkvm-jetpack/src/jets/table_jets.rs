@@ -167,7 +167,7 @@ fn create_table_dat(stack: &mut NockStack, table_mary: Noun, name: &str) -> Resu
 
 /// Convert vector to noun list
 fn vec_to_list(stack: &mut NockStack, items: Vec<Noun>) -> Result {
-    let mut list = D(0);
+    let mut list = safe_d(stack, 0);  // Use safe_d instead of D()
     for item in items.into_iter().rev() {
         list = T(stack, &[item, list]);
     }
