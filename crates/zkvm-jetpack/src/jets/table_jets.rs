@@ -12,8 +12,6 @@ use nockvm::jets::Result;
 use nockvm::noun::{Noun, D, T, IndirectAtom};
 use nockvm::mem::NockStack;
 
-use crate::jets::utils::jet_err;
-
 /// build-table-dats jet
 /// 
 /// This jets the function at hoon/common/stark/prover.hoon:551
@@ -33,7 +31,14 @@ pub fn build_table_dats_jet(context: &mut Context, subject: Noun) -> Result {
     let override_opt = slot(arg, 3)?;
     
     // For now, we only support building all tables (no override)
-    if override_opt != D(0) {
+    // Check if override_opt is 0 (empty list)
+    let is_override_empty = if let Ok(atom) = override_opt.as_atom() {
+        atom.as_u64().unwrap_or(1) == 0
+    } else {
+        false
+    };
+    
+    if !is_override_empty {
         eprintln!("build_table_dats_jet: Override not supported yet, building all tables");
     }
     
@@ -177,7 +182,14 @@ fn process_compute_queue(context: &mut Context, queue: Noun) -> Result {
         };
         
         let head = cell.head();
-        if head == D(0) {
+        // Check if head is 0 (end marker)
+        let is_end = if let Ok(atom) = head.as_atom() {
+            atom.as_u64().unwrap_or(1) == 0
+        } else {
+            false
+        };
+        
+        if is_end {
             break; // End marker
         }
         
@@ -226,7 +238,14 @@ fn process_compute_queue(context: &mut Context, queue: Noun) -> Result {
             }
         }
         
-        if current_queue == D(0) {
+        // Check if we've reached the end
+        let is_queue_end = if let Ok(atom) = current_queue.as_atom() {
+            atom.as_u64().unwrap_or(1) == 0
+        } else {
+            false
+        };
+        
+        if is_queue_end {
             break;
         }
     }
