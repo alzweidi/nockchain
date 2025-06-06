@@ -250,7 +250,7 @@ fn create_compute_header(stack: &mut NockStack) -> Result {
     // The actual prime value: 0xffffffff00000001 = 18446744069414584321
     // This is larger than DIRECT_MAX (0x7fffffffffffffff = 9223372036854775807)
     // TODO: Fix the Hoon code to handle large primes properly
-    let prime = safe_d(stack, 0x7fffffff00000001); // Smaller prime that fits in DIRECT_MAX
+    let prime = safe_d(stack, 0xffffffff00000001); // Smaller prime that fits in DIRECT_MAX
     eprintln!("create_compute_header: Using temporary smaller prime to avoid DIRECT_MAX panic");
     
     let base_width = safe_d(stack, 11);
