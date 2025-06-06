@@ -38,11 +38,8 @@ fn make_atom(stack: &mut NockStack, value: u64) -> Noun {
 /// Returns:
 /// - list of table-dat structures
 pub fn build_table_dats_jet(context: &mut Context, subject: Noun) -> Result {
-    eprintln!("build_table_dats_jet: Called! This jet is working.");
-    
-    // Try a minimal implementation that just returns an empty list
-    eprintln!("build_table_dats_jet: Returning minimal empty list");
-    Ok(D(0)) // Return empty list (~)
+    // Return Err to fall back to Hoon implementation
+    Err(Error::Deterministic)
 }
 
 /// Build compute table
