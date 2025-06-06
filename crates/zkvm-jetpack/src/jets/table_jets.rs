@@ -6,7 +6,7 @@
 /// 
 /// Future optimization: Add parallelization for additional speedup.
 
-use nockvm::interpreter::Context;
+use nockvm::interpreter::{Context, Error};
 use nockvm::jets::util::slot;
 use nockvm::jets::Result;
 use nockvm::noun::{Noun, D, T, IndirectAtom, Atom};
@@ -14,11 +14,16 @@ use nockvm::mem::NockStack;
 
 /// Helper function to create an atom that handles values larger than DIRECT_MAX
 fn make_atom(stack: &mut NockStack, value: u64) -> Noun {
+    eprintln!("make_atom: Called with value {} (hex: {:x})", value, value);
     if value <= 0x7FFFFFFFFFFFFFFF { // DIRECT_MAX
+        eprintln!("make_atom: Value is <= DIRECT_MAX, using D()");
         D(value)
     } else {
+        eprintln!("make_atom: Value is > DIRECT_MAX, using Atom::new()");
         // Create indirect atom for large values
-        Atom::new(stack, value).as_noun()
+        let atom = Atom::new(stack, value).as_noun();
+        eprintln!("make_atom: Indirect atom created successfully");
+        atom
     }
 }
 
@@ -34,6 +39,10 @@ fn make_atom(stack: &mut NockStack, value: u64) -> Noun {
 /// - list of table-dat structures
 pub fn build_table_dats_jet(context: &mut Context, subject: Noun) -> Result {
     eprintln!("build_table_dats_jet: Called! This jet is working.");
+    
+    // Add debug info about the subject
+    eprintln!("build_table_dats_jet: Subject type: {:?}", 
+        if subject.is_atom() { "atom" } else if subject.is_cell() { "cell" } else { "unknown" });
     
     // Extract arguments from subject with better error handling
     eprintln!("build_table_dats_jet: Processing fock-return data");
@@ -82,9 +91,16 @@ pub fn build_table_dats_jet(context: &mut Context, subject: Noun) -> Result {
     
     // Create a simple header with correct values
     let simple_header = {
-        let name = D(0x6d656d6f7279); // "memory" as a small direct atom
-        // Use the actual prime value: 0xffffffff00000001
-        let prime = make_atom(&mut context.stack, 0xffffffff00000001u64);
+        eprintln!("build_table_dats_jet: Creating name atom...");
+        // Use a simple small value for testing
+        let name = D(1); // Temporary: just use 1 for the name
+        eprintln!("build_table_dats_jet: Name atom created successfully (using test value 1)");
+        
+        // Temporarily use a small prime for testing
+        eprintln!("build_table_dats_jet: Creating prime atom...");
+        let prime = D(65537); // Small prime for testing
+        eprintln!("build_table_dats_jet: Prime atom created successfully (using test value 65537)");
+        
         let base_width = D(8);
         let ext_width = D(0);
         let mega_ext_width = D(5);
@@ -92,6 +108,7 @@ pub fn build_table_dats_jet(context: &mut Context, subject: Noun) -> Result {
         let num_randomizers = D(1);
         
         // Build structure carefully
+        eprintln!("build_table_dats_jet: Building header structure...");
         let inner7 = D(0);
         let inner6 = T(&mut context.stack, &[num_randomizers, inner7]);
         let inner5 = T(&mut context.stack, &[full_width, inner6]);
@@ -99,7 +116,9 @@ pub fn build_table_dats_jet(context: &mut Context, subject: Noun) -> Result {
         let inner3 = T(&mut context.stack, &[ext_width, inner4]);
         let inner2 = T(&mut context.stack, &[base_width, inner3]);
         let inner1 = T(&mut context.stack, &[prime, inner2]);
-        T(&mut context.stack, &[name, inner1])
+        let header = T(&mut context.stack, &[name, inner1]);
+        eprintln!("build_table_dats_jet: Header structure built successfully");
+        header
     };
     
     // Create minimal table-mary [header rows]
