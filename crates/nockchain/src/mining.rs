@@ -114,6 +114,7 @@ impl FromStr for MiningKeyConfig {
 // Cached mining resources to avoid repeated allocations
 struct MiningResources {
     kernel: Kernel,
+    batch_kernel: Option<Kernel>,  // Kernel for batch mining
     snapshot_dir: PathBuf,
 }
 
@@ -123,15 +124,13 @@ const MAX_MINING_QUEUE: usize = 32; // Maximum queued candidates
 
 /// Calculate optimal worker count based on available threads
 /// 
-/// Uses multiple workers to parallelize proof attempts while each
-/// worker uses parallel FFT for its proof generation.
+/// For batch processing, we use a single worker that processes
+/// multiple nonces in parallel within a single kernel instance.
 /// 
-/// With 256 threads: 8 workers × 32 threads each = full utilization
+/// This avoids the memory overhead of multiple kernel instances.
 fn calculate_optimal_workers(total_threads: usize) -> usize {
-    // Use ~32 threads per worker for optimal FFT performance
-    // Minimum 1 worker, maximum reasonable based on thread count
-    let workers = total_threads / 32;
-    std::cmp::max(1, std::cmp::min(workers, 16)) // Cap at 16 workers max
+    // Single worker for batch processing
+    1
 }
 
 pub fn create_mining_driver(
@@ -238,6 +237,23 @@ pub fn create_mining_driver(
                                     warn!("Error sending candidate to mining pool: {:?}", e);
                                 }
                             }
+                        } else if effect_cell.head().eq_bytes("mine-batch") {
+                            let batch_slab = {
+                                let mut slab = NounSlab::new();
+                                slab.copy_into(effect_cell.tail());
+                                slab
+                            };
+                            
+                            // Try to send batch to worker pool
+                            match candidate_tx.try_send(batch_slab) {
+                                Ok(_) => {},
+                                Err(mpsc::error::TrySendError::Full(_)) => {
+                                    warn!("Mining queue full, dropping batch");
+                                }
+                                Err(e) => {
+                                    warn!("Error sending batch to mining pool: {:?}", e);
+                                }
+                            }
                         }
                     },
                     // Monitor worker health and restart if needed
@@ -295,11 +311,28 @@ async fn mining_worker(
             }
         };
         
+        // Check if this is a batch or single nonce attempt
+        let is_batch = {
+            let candidate_root = unsafe { candidate.root() };
+            if let Ok(cell) = unsafe { candidate_root.as_cell() } {
+                cell.head().eq_bytes("mine-batch")
+            } else {
+                false
+            }
+        };
+        
         // Process the mining attempt with this worker's kernel
         // Create a new handle for this attempt
         let (new_handle, attempt_handle) = handle.dup();
         handle = new_handle; // Save one handle for the next iteration
-        mining_attempt_with_worker(candidate, attempt_handle, resources.clone(), worker_id).await;
+        
+        if is_batch {
+            // TODO: Implement batch mining with parallel proof generation
+            warn!("Batch mining received but not yet fully implemented, falling back to regular mining");
+            mining_attempt_with_worker(candidate, attempt_handle, resources.clone(), worker_id).await;
+        } else {
+            mining_attempt_with_worker(candidate, attempt_handle, resources.clone(), worker_id).await;
+        }
     }
 }
 
@@ -358,6 +391,7 @@ async fn initialize_mining_resources() -> Result<MiningResources, Box<dyn std::e
     
     Ok(MiningResources {
         kernel,
+        batch_kernel: None,  // Will be loaded on demand
         snapshot_dir: snapshot_path_buf,
     })
 }
