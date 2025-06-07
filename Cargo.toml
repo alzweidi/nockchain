@@ -192,11 +192,30 @@ inherits = "release"
 
 [profile.release]
 opt-level = 3
-lto = "thin"
+lto = "fat"
 codegen-units = 1
 debug = 1
+strip = false
+panic = "abort"
+overflow-checks = false
+incremental = false
+
+[profile.release.build-override]
+opt-level = 3
+codegen-units = 1
 
 [profile.release.package."*"]
 opt-level = 3
 codegen-units = 1
 debug = 1
+
+[profile.mining]
+inherits = "release"
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = false
+overflow-checks = false
+incremental = false
+# Note: rustflags must be set via .cargo/config.toml or RUSTFLAGS env var
