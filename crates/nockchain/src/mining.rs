@@ -123,19 +123,14 @@ const MAX_MINING_QUEUE: usize = 32; // Maximum queued candidates
 
 /// Calculate optimal worker count based on available threads
 /// 
-/// TEMPORARY FIX: Capped at 8 workers to prevent excessive memory usage
-/// Each worker loads a full kernel + state (~4GB each)
+/// TESTING: Force single worker to see if parallel FFT is more efficient
+/// than parallel workers. This uses all threads for FFT operations within
+/// one worker instead of splitting across multiple workers.
 /// 
 /// TODO: Implement producer-consumer model to separate state from compute
 fn calculate_optimal_workers(total_threads: usize) -> usize {
-    // Cap at 8 workers maximum to prevent OOM
-    // 8 workers × 4GB = ~32GB RAM usage
-    std::cmp::min(8, match total_threads {
-        1..=4 => 1,
-        5..=8 => 2,
-        9..=16 => 4,
-        _ => 8,  // Was: total_threads / 4
-    })
+    // Force single worker - all threads used for parallel FFT
+    1
 }
 
 pub fn create_mining_driver(
