@@ -123,14 +123,15 @@ const MAX_MINING_QUEUE: usize = 32; // Maximum queued candidates
 
 /// Calculate optimal worker count based on available threads
 /// 
-/// TESTING: Force single worker to see if parallel FFT is more efficient
-/// than parallel workers. This uses all threads for FFT operations within
-/// one worker instead of splitting across multiple workers.
+/// Uses multiple workers to parallelize proof attempts while each
+/// worker uses parallel FFT for its proof generation.
 /// 
-/// TODO: Implement producer-consumer model to separate state from compute
+/// With 256 threads: 8 workers × 32 threads each = full utilization
 fn calculate_optimal_workers(total_threads: usize) -> usize {
-    // Force single worker - all threads used for parallel FFT
-    1
+    // Use ~32 threads per worker for optimal FFT performance
+    // Minimum 1 worker, maximum reasonable based on thread count
+    let workers = total_threads / 32;
+    std::cmp::max(1, std::cmp::min(workers, 16)) // Cap at 16 workers max
 }
 
 pub fn create_mining_driver(
