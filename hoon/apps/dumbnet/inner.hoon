@@ -981,7 +981,7 @@
       ==
       ::
       ++  do-mine
-        |=  nonce=noun-digest:tip5:zeke
+        |=  base-nonce=noun-digest:tip5:zeke
         ^-  [(list effect:dk) kernel-state:dk]
         ?.  mining.m.k
           `k
@@ -990,10 +990,24 @@
           `k
         =/  commit=block-commitment:t
           (block-commitment:page:t candidate-block.m.k)
-        =.  next-nonce.m.k  nonce
-        ~&  mining-on+nonce
+        ::  Check if batch mining is enabled
+        ::  For now, hardcode batch size - can be made configurable later
+        =/  batch-size=@  256
+        ?:  =(batch-size 0)
+          ::  Single nonce mode (original behavior)
+          =.  next-nonce.m.k  base-nonce
+          ~&  mining-on+base-nonce
+          :_  k
+          [%mine pow-len:zeke commit base-nonce]~
+        ::  Batch mode - generate multiple nonces
+        =/  nonces=(list noun-digest:tip5:zeke)
+          %+  turn  (gulf 0 (dec batch-size))
+          |=  i=@
+          (hash-noun-varlen:tip5:zeke [base-nonce i])
+        =.  next-nonce.m.k  (hash-noun-varlen:tip5:zeke [base-nonce batch-size])
+        ~&  mining-batch+batch-size
         :_  k
-        [%mine pow-len:zeke commit nonce]~
+        [%mine-batch pow-len:zeke commit nonces]~
       ::
       ::  only send a %elders request for reasonable heights
       ++  missing-parent-effects
