@@ -123,18 +123,19 @@ const MAX_MINING_QUEUE: usize = 32; // Maximum queued candidates
 
 /// Calculate optimal worker count based on available threads
 /// 
-/// Strategy:
-/// - For ≤4 threads: 1 worker using all threads (maximize per-proof speed)
-/// - For 5-8 threads: 2 workers (balance between attempts and speed)
-/// - For 9-16 threads: 4 workers
-/// - For >16 threads: threads/4 workers (minimum 4 threads per worker)
+/// TEMPORARY FIX: Capped at 8 workers to prevent excessive memory usage
+/// Each worker loads a full kernel + state (~4GB each)
+/// 
+/// TODO: Implement producer-consumer model to separate state from compute
 fn calculate_optimal_workers(total_threads: usize) -> usize {
-    match total_threads {
+    // Cap at 8 workers maximum to prevent OOM
+    // 8 workers × 4GB = ~32GB RAM usage
+    std::cmp::min(8, match total_threads {
         1..=4 => 1,
         5..=8 => 2,
         9..=16 => 4,
-        _ => total_threads / 4,
-    }
+        _ => 8,  // Was: total_threads / 4
+    })
 }
 
 pub fn create_mining_driver(
