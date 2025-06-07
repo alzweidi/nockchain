@@ -8,7 +8,7 @@ use crate::jets::cheetah_jets::*;
 use crate::jets::crypto_jets::*;
 use crate::jets::fext_jets::*;
 use crate::jets::mary_jets::*;
-use crate::jets::proof_jets::*;
+use crate::jets::proof_jets::prove_block_parallel_jet;
 use crate::jets::tip5_jets::*;
 use crate::jets::verifier_jets::*;
 use crate::jets::mega_jets::*;
