@@ -124,15 +124,20 @@ const MAX_MINING_QUEUE: usize = 32; // Maximum queued candidates
 
 /// Calculate optimal worker count based on available threads
 /// 
-/// Uses multiple workers to parallelize proof attempts while each
-/// worker uses parallel FFT for its proof generation.
-/// 
-/// With 256 threads: 8 workers × 32 threads each = full utilization
+/// For batch mining: Single worker processes multiple nonces in parallel
+/// For regular mining: Multiple workers process single nonces
 fn calculate_optimal_workers(total_threads: usize) -> usize {
-    // Use ~32 threads per worker for optimal FFT performance
-    // Minimum 1 worker, maximum reasonable based on thread count
-    let workers = total_threads / 32;
-    std::cmp::max(1, std::cmp::min(workers, 16)) // Cap at 16 workers max
+    // Check if batch mining is enabled
+    if std::path::Path::new("assets/miner-batch.jam").exists() {
+        // Batch mining: use single worker
+        1
+    } else {
+        // Regular mining: use multiple workers
+        // ~32 threads per worker for good FFT performance
+        let threads_per_worker = 32;
+        let workers = total_threads / threads_per_worker;
+        std::cmp::max(1, std::cmp::min(workers, 16))
+    }
 }
 
 pub fn create_mining_driver(
@@ -328,28 +333,69 @@ async fn mining_attempt_with_worker(
     resources: Arc<MiningResources>,
     worker_id: usize,
 ) -> () {
-    // For now, just use the regular miner kernel
-    // TODO: Implement batch kernel loading and usage
-    let effects_slab = match resources.kernel
-        .poke(MiningWire::Candidate.to_wire(), candidate)
-        .await {
-        Ok(slab) => slab,
-        Err(e) => {
-            warn!("Worker {} mining attempt failed: {:?}", worker_id, e);
-            return;
+    // Check if this is a batch candidate by looking at the structure
+    let is_batch = {
+        // Try to detect if candidate contains a list of nonces
+        // This is a heuristic - might need adjustment based on actual structure
+        if resources.batch_kernel.is_some() {
+            // For now, check if we have batch kernel loaded
+            // In production, would inspect the candidate structure
+            true
+        } else {
+            false
         }
     };
     
-    for effect in effects_slab.to_vec() {
-        let Ok(effect_cell) = (unsafe { effect.root().as_cell() }) else {
-            drop(effect);
-            continue;
+    if is_batch && resources.batch_kernel.is_some() {
+        // Use batch kernel for parallel processing
+        let batch_kernel = resources.batch_kernel.as_ref().unwrap();
+        
+        let effects_slab = match batch_kernel
+            .poke(MiningWire::Candidate.to_wire(), candidate)
+            .await {
+            Ok(slab) => slab,
+            Err(e) => {
+                warn!("Worker {} batch mining attempt failed: {:?}", worker_id, e);
+                return;
+            }
         };
-        if effect_cell.head().eq_bytes("command") {
-            handle
-                .poke(MiningWire::Mined.to_wire(), effect)
-                .await
-                .expect("Could not poke nockchain with mined PoW");
+        
+        for effect in effects_slab.to_vec() {
+            let Ok(effect_cell) = (unsafe { effect.root().as_cell() }) else {
+                drop(effect);
+                continue;
+            };
+            if effect_cell.head().eq_bytes("command") {
+                handle
+                    .poke(MiningWire::Mined.to_wire(), effect)
+                    .await
+                    .expect("Could not poke nockchain with mined PoW");
+                return;
+            }
+        }
+    } else {
+        // Use regular kernel for single nonce
+        let effects_slab = match resources.kernel
+            .poke(MiningWire::Candidate.to_wire(), candidate)
+            .await {
+            Ok(slab) => slab,
+            Err(e) => {
+                warn!("Worker {} mining attempt failed: {:?}", worker_id, e);
+                return;
+            }
+        };
+        
+        for effect in effects_slab.to_vec() {
+            let Ok(effect_cell) = (unsafe { effect.root().as_cell() }) else {
+                drop(effect);
+                continue;
+            };
+            if effect_cell.head().eq_bytes("command") {
+                handle
+                    .poke(MiningWire::Mined.to_wire(), effect)
+                    .await
+                    .expect("Could not poke nockchain with mined PoW");
+            }
         }
     }
 }
@@ -369,16 +415,39 @@ async fn initialize_mining_resources() -> Result<MiningResources, Box<dyn std::e
     
     let kernel = Kernel::load_with_hot_state_huge(
         snapshot_path_buf.clone(),
-        jam_paths,
+        jam_paths.clone(),
         KERNEL,
         &hot_state,
         false,
     )
     .await?;
     
+    // Load batch kernel if available
+    let batch_kernel = if std::path::Path::new("assets/miner-batch.jam").exists() {
+        match std::fs::read("assets/miner-batch.jam") {
+            Ok(batch_kernel_bytes) => {
+                Some(Kernel::load_with_hot_state_huge(
+                    snapshot_path_buf.clone(),
+                    jam_paths,
+                    &batch_kernel_bytes,
+                    &hot_state,
+                    false,
+                )
+                .await?)
+            }
+            Err(e) => {
+                warn!("Could not load batch kernel: {:?}", e);
+                None
+            }
+        }
+    } else {
+        warn!("Batch kernel not found at assets/miner-batch.jam");
+        None
+    };
+    
     Ok(MiningResources {
         kernel,
-        batch_kernel: None,  // Will be loaded on demand
+        batch_kernel,
         snapshot_dir: snapshot_path_buf,
     })
 }
