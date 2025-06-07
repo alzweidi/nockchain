@@ -124,13 +124,15 @@ const MAX_MINING_QUEUE: usize = 32; // Maximum queued candidates
 
 /// Calculate optimal worker count based on available threads
 /// 
-/// For batch processing, we use a single worker that processes
-/// multiple nonces in parallel within a single kernel instance.
+/// Uses multiple workers to parallelize proof attempts while each
+/// worker uses parallel FFT for its proof generation.
 /// 
-/// This avoids the memory overhead of multiple kernel instances.
+/// With 256 threads: 8 workers × 32 threads each = full utilization
 fn calculate_optimal_workers(total_threads: usize) -> usize {
-    // Single worker for batch processing
-    1
+    // Use ~32 threads per worker for optimal FFT performance
+    // Minimum 1 worker, maximum reasonable based on thread count
+    let workers = total_threads / 32;
+    std::cmp::max(1, std::cmp::min(workers, 16)) // Cap at 16 workers max
 }
 
 pub fn create_mining_driver(
@@ -311,28 +313,11 @@ async fn mining_worker(
             }
         };
         
-        // Check if this is a batch or single nonce attempt
-        let is_batch = {
-            let candidate_root = unsafe { candidate.root() };
-            if let Ok(cell) = unsafe { candidate_root.as_cell() } {
-                cell.head().eq_bytes("mine-batch")
-            } else {
-                false
-            }
-        };
-        
         // Process the mining attempt with this worker's kernel
         // Create a new handle for this attempt
         let (new_handle, attempt_handle) = handle.dup();
         handle = new_handle; // Save one handle for the next iteration
-        
-        if is_batch {
-            // TODO: Implement batch mining with parallel proof generation
-            warn!("Batch mining received but not yet fully implemented, falling back to regular mining");
-            mining_attempt_with_worker(candidate, attempt_handle, resources.clone(), worker_id).await;
-        } else {
-            mining_attempt_with_worker(candidate, attempt_handle, resources.clone(), worker_id).await;
-        }
+        mining_attempt_with_worker(candidate, attempt_handle, resources.clone(), worker_id).await;
     }
 }
 
@@ -343,6 +328,8 @@ async fn mining_attempt_with_worker(
     resources: Arc<MiningResources>,
     worker_id: usize,
 ) -> () {
+    // For now, just use the regular miner kernel
+    // TODO: Implement batch kernel loading and usage
     let effects_slab = match resources.kernel
         .poke(MiningWire::Candidate.to_wire(), candidate)
         .await {
