@@ -6,3 +6,6 @@ pub mod dumb;
 
 #[cfg(feature = "miner")]
 pub mod miner;
+
+#[cfg(feature = "miner")]
+pub mod miner_batch;
