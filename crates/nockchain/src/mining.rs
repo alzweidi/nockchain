@@ -118,7 +118,7 @@ struct MiningResources {
 }
 
 // Mining worker pool configuration
-const DEFAULT_MINING_THREADS: usize = 4; // Default to 4 threads
+const DEFAULT_MINING_THREADS: usize = 4;
 const MAX_MINING_QUEUE: usize = 32; // Maximum queued candidates
 
 /// Calculate optimal worker count based on available threads
@@ -190,7 +190,6 @@ pub fn create_mining_driver(
             
             // Calculate optimal worker count
             let worker_count = calculate_optimal_workers(total_threads);
-            let threads_per_worker = total_threads / worker_count;
             
             // Create channels for distributing work to mining threads
             let (candidate_tx, candidate_rx) = mpsc::channel::<NounSlab>(MAX_MINING_QUEUE);
