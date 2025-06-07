@@ -1,4 +1,5 @@
 /=  mine  /common/pow
+/=  pow-parallel  /common/pow-parallel
 /=  sp  /common/stark/prover
 /=  *  /common/zoon
 /=  *  /common/zeke
@@ -33,20 +34,14 @@
       `k
     =/  batch  u.batch
     ~>  %slog.[0 [%leaf "batch miner: processing {<(lent nonces.batch)>} nonces"]]
-    ::  Process nonces to find valid proof
-    ::  TODO: This needs to be parallelized via jets
-    =/  results=(list [nonce=noun-digest:tip5 prf=proof:sp dig=tip5-hash-atom])
-      %+  turn  nonces.batch
-      |=  nonce=noun-digest:tip5
-      =/  [prf=proof:sp dig=tip5-hash-atom]
-        (prove-block-inner:mine length.batch block-commitment.batch nonce)
-      [nonce prf dig]
-    ::  For now, just return the first result
-    ::  In the future, this will check targets and return first valid
-    ?~  results
-      ~>  %slog.[0 [%leaf "batch miner: no results"]]
+    ::  Use parallel proof generation
+    =/  result  (prove-block-parallel:pow-parallel length.batch block-commitment.batch nonces.batch)
+    ?~  result
+      ~>  %slog.[0 [%leaf "batch miner: no valid proof found"]]
       `k
-    =/  [nonce=noun-digest:tip5 prf=proof:sp dig=tip5-hash-atom]  i.results
+    ::  Found a valid proof
+    =/  [prf=proof:sp dig=tip5-hash-atom nonce=noun-digest:tip5]  u.result
+    ~>  %slog.[0 [%leaf "batch miner: found valid proof!"]]
     :_  k
     [%command %pow prf dig block-commitment.batch nonce]~
   --
