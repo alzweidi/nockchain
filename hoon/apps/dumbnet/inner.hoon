@@ -981,7 +981,7 @@
       ==
       ::
       ++  do-mine
-        |=  base-nonce=noun-digest:tip5:zeke
+        |=  nonce=noun-digest:tip5:zeke
         ^-  [(list effect:dk) kernel-state:dk]
         ?.  mining.m.k
           `k
@@ -990,15 +990,10 @@
           `k
         =/  commit=block-commitment:t
           (block-commitment:page:t candidate-block.m.k)
-        ::  Generate batch of 256 nonces
-        =/  nonces=(list noun-digest:tip5:zeke)
-          %+  turn  (gulf 0 255)
-          |=  i=@
-          (hash-noun-varlen:tip5:zeke [base-nonce i])
-        =.  next-nonce.m.k  (hash-noun-varlen:tip5:zeke [base-nonce 256])
-        ~&  mining-batch+256
+        =.  next-nonce.m.k  nonce
+        ~&  mining-on+nonce
         :_  k
-        [%mine-batch pow-len:zeke commit nonces]~
+        [%mine pow-len:zeke commit nonce]~
       ::
       ::  only send a %elders request for reasonable heights
       ++  missing-parent-effects
