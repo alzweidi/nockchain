@@ -8,6 +8,7 @@ use crate::jets::cheetah_jets::*;
 use crate::jets::crypto_jets::*;
 use crate::jets::fext_jets::*;
 use crate::jets::mary_jets::*;
+use crate::jets::proof_jets::*;
 use crate::jets::tip5_jets::*;
 use crate::jets::verifier_jets::*;
 use crate::jets::mega_jets::*;
@@ -39,6 +40,7 @@ pub fn produce_prover_hot_state() -> Vec<HotEntry> {
     jets.extend(KEYGEN_JETS);
     jets.extend(XTRA_JETS);
     jets.extend(EXTENSION_FIELD_JETS);
+    jets.extend(PROOF_JETS);
 
     jets
 }
@@ -550,6 +552,26 @@ pub const KEYGEN_JETS: &[HotEntry] = &[(
     1,
     argon2_jet,
 )];
+
+pub const PROOF_JETS: &[HotEntry] = &[
+    (
+        &[
+            K_138,
+            Left(b"one"),
+            Left(b"two"),
+            Left(b"tri"),
+            Left(b"qua"),
+            Left(b"pen"),
+            Left(b"hex"),
+            Left(b"hep"),
+            Left(b"common"),
+            Left(b"pow-parallel"),
+            Left(b"prove-block-parallel"),
+        ],
+        1,
+        prove_block_parallel_jet,
+    ),
+];
 
 pub const CURVE_JETS: &[HotEntry] = &[(
     &[
