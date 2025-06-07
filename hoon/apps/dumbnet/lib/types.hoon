@@ -183,7 +183,9 @@
       [%request p=request]  :: request specific tx or block
       [%track p=track]  :: runtime tracking of blocks for %liar-block-id effect
       [%seen p=seen]    ::  seen so don't reprocess
-      [%mine length=@ block-commitment=noun-digest:tip5:zeke nonce=noun-digest:tip5:zeke]
+      $%  [%mine length=@ block-commitment=noun-digest:tip5:zeke nonce=noun-digest:tip5:zeke]
+          [%mine-batch length=@ block-commitment=noun-digest:tip5:zeke nonces=(list noun-digest:tip5:zeke)]
+      ==
       lie
       span-effect
       [%exit code=@]
