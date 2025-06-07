@@ -151,7 +151,7 @@ pub fn bp_hadamard_parallel_jet(context: &mut Context, subject: Noun) -> Result 
     let threads = get_mining_threads();
     if res_len > 32 && threads > 1 {  // Lowered from 1024 to 32
         // Use parallel chunks for better cache locality
-        let chunk_size = (res_len + threads - 1) / threads;
+        let chunk_size = std::cmp::max(1, (res_len + threads - 1) / threads);
         res_poly.par_chunks_mut(chunk_size)
             .zip(bp_poly.0.par_chunks(chunk_size).zip(bq_poly.0.par_chunks(chunk_size)))
             .for_each(|(res_chunk, (a_chunk, b_chunk))| {
@@ -210,7 +210,7 @@ fn bp_ntt_parallel(bp: &[Belt], root: &Belt) -> Vec<Belt> {
         let mut x_permuted = vec![Belt(0); n];
         
         // Use parallel chunks for bit reversal
-        let chunk_size = (n + threads - 1) / threads;
+        let chunk_size = std::cmp::max(1, (n + threads - 1) / threads);
         x_permuted.par_chunks_mut(chunk_size)
             .enumerate()
             .for_each(|(chunk_idx, chunk)| {
@@ -312,8 +312,9 @@ fn bpmul_fft_parallel(a: &[Belt], b: &[Belt], result: &mut [Belt]) -> std::resul
     let mut c_fft = vec![Belt(0); padded_len];
     let threads = get_mining_threads();
     if padded_len >= 32 && threads > 1 {  // Lowered from 1024 to 32
-        c_fft.par_chunks_mut(padded_len / threads)
-            .zip(a_fft.par_chunks(padded_len / threads).zip(b_fft.par_chunks(padded_len / threads)))
+        let chunk_size = std::cmp::max(1, padded_len / threads);
+        c_fft.par_chunks_mut(chunk_size)
+            .zip(a_fft.par_chunks(chunk_size).zip(b_fft.par_chunks(chunk_size)))
             .for_each(|(c_chunk, (a_chunk, b_chunk))| {
                 for ((c, a), b) in c_chunk.iter_mut().zip(a_chunk.iter()).zip(b_chunk.iter()) {
                     *c = *a * *b;
