@@ -15,6 +15,7 @@ use nockvm_macros::tas;
 use tempfile::tempdir;
 use tracing::{instrument, warn};
 use tokio::sync::mpsc;
+use tokio::sync::broadcast;
 use tokio::task::JoinSet;
 
 /// Mining module for Nockchain
@@ -196,6 +197,9 @@ pub fn create_mining_driver(
             let (candidate_tx, candidate_rx) = mpsc::channel::<NounSlab>(MAX_MINING_QUEUE);
             let candidate_rx = Arc::new(tokio::sync::Mutex::new(candidate_rx));
 
+            // Create broadcast channel for stop signals
+            let (stop_tx, _) = broadcast::channel::<()>(1);
+
             // Start mining worker pool
             let mut mining_workers = JoinSet::new();
             
@@ -206,10 +210,13 @@ pub fn create_mining_driver(
                 let (new_handle, worker_handle) = handle.dup();
                 handle = new_handle;  // Reassign handle for next iteration
                 
+                let stop_rx = stop_tx.subscribe();
+                
                 mining_workers.spawn(mining_worker(
                     worker_id,
                     worker_rx,
                     worker_handle,
+                    stop_rx,
                 ));
             }
 
@@ -231,6 +238,9 @@ pub fn create_mining_driver(
                                 slab.copy_into(effect_cell.tail());
                                 slab
                             };
+                            
+                            // Send stop signal to all workers to abandon current work
+                            let _ = stop_tx.send(());
                             
                             // Try to send to worker pool
                             match candidate_tx.try_send(candidate_slab) {
@@ -254,10 +264,13 @@ pub fn create_mining_driver(
                                 let (new_handle, worker_handle) = handle.dup();
                                 handle = new_handle;  // Reassign handle
                                 
+                                let stop_rx = stop_tx.subscribe();
+                                
                                 mining_workers.spawn(mining_worker(
                                     worker_id,
                                     worker_rx,
                                     worker_handle,
+                                    stop_rx,
                                 ));
                             }
                             Err(e) => {
@@ -276,6 +289,7 @@ async fn mining_worker(
     worker_id: usize,
     candidate_rx: Arc<tokio::sync::Mutex<mpsc::Receiver<NounSlab>>>,
     mut handle: NockAppHandle,
+    mut stop_rx: broadcast::Receiver<()>,
 ) -> usize {
     // Each worker gets its own kernel instance and resources
     let resources = match initialize_mining_resources().await {
@@ -287,23 +301,43 @@ async fn mining_worker(
     };
     
     loop {
-        // Wait for next candidate
-        let candidate = {
-            let mut rx = candidate_rx.lock().await;
-            match rx.recv().await {
-                Some(c) => c,
-                None => {
-                    warn!("Mining worker {} channel closed", worker_id);
-                    return worker_id;
+        tokio::select! {
+            // Wait for next candidate
+            result = async {
+                let mut rx = candidate_rx.lock().await;
+                rx.recv().await
+            } => {
+                match result {
+                    Some(candidate) => {
+                        // Process the mining attempt with this worker's kernel
+                        // Create a new handle for this attempt
+                        let (new_handle, attempt_handle) = handle.dup();
+                        handle = new_handle; // Save one handle for the next iteration
+                        
+                        // Create a stop receiver for this specific attempt
+                        let attempt_stop_rx = stop_rx.resubscribe();
+                        
+                        mining_attempt_with_worker(
+                            candidate, 
+                            attempt_handle, 
+                            resources.clone(), 
+                            worker_id,
+                            attempt_stop_rx
+                        ).await;
+                    }
+                    None => {
+                        warn!("Mining worker {} channel closed", worker_id);
+                        return worker_id;
+                    }
                 }
+            },
+            // Stop signal received - continue to check for new work
+            _ = stop_rx.recv() => {
+                // Don't exit worker, just abandon current work
+                // The actual work abandonment happens in mining_attempt_with_worker
+                continue;
             }
-        };
-        
-        // Process the mining attempt with this worker's kernel
-        // Create a new handle for this attempt
-        let (new_handle, attempt_handle) = handle.dup();
-        handle = new_handle; // Save one handle for the next iteration
-        mining_attempt_with_worker(candidate, attempt_handle, resources.clone(), worker_id).await;
+        }
     }
 }
 
@@ -313,27 +347,37 @@ async fn mining_attempt_with_worker(
     handle: NockAppHandle,
     resources: Arc<MiningResources>,
     worker_id: usize,
+    mut stop_rx: broadcast::Receiver<()>,
 ) -> () {
-    let effects_slab = match resources.kernel
-        .poke(MiningWire::Candidate.to_wire(), candidate)
-        .await {
-        Ok(slab) => slab,
-        Err(e) => {
-            warn!("Worker {} mining attempt failed: {:?}", worker_id, e);
+    tokio::select! {
+        // Try to complete the proof
+        result = resources.kernel.poke(MiningWire::Candidate.to_wire(), candidate) => {
+            match result {
+                Ok(effects_slab) => {
+                    // Process successful proof
+                    for effect in effects_slab.to_vec() {
+                        let Ok(effect_cell) = (unsafe { effect.root().as_cell() }) else {
+                            drop(effect);
+                            continue;
+                        };
+                        if effect_cell.head().eq_bytes("command") {
+                            handle
+                                .poke(MiningWire::Mined.to_wire(), effect)
+                                .await
+                                .expect("Could not poke nockchain with mined PoW");
+                        }
+                    }
+                },
+                Err(e) => {
+                    warn!("Worker {} mining attempt failed: {:?}", worker_id, e);
+                }
+            }
+        },
+        // Stop signal received - abandon this proof attempt
+        _ = stop_rx.recv() => {
+            // Just return early, abandoning the current proof
+            // The kernel will be reused for the next attempt
             return;
-        }
-    };
-    
-    for effect in effects_slab.to_vec() {
-        let Ok(effect_cell) = (unsafe { effect.root().as_cell() }) else {
-            drop(effect);
-            continue;
-        };
-        if effect_cell.head().eq_bytes("command") {
-            handle
-                .poke(MiningWire::Mined.to_wire(), effect)
-                .await
-                .expect("Could not poke nockchain with mined PoW");
         }
     }
 }
