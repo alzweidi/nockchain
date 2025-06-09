@@ -835,12 +835,15 @@
         =/  commit=block-commitment:t
           (block-commitment:page:t candidate-block.m.k)
         ?.  =(bc.command commit)
-                    ~&  "mined for wrong (old) block commitment"        
-                    (do-mine (atom-to-digest:tip5:zeke next-nonce.m.k))
+          ~&  "mined for wrong (old) block commitment"  `k
         ?.  =(nonce.command next-nonce.m.k)
           ~&  "mined wrong (old) nonce"  `k
-        ?:  %+  check-target:mine  dig.command
-            (~(got z-by targets.c.k) parent.candidate-block.m.k)
+        ?:  ?:  =(*page-number:t candidate-block.m.k)
+              %+  check-target:mine  dig.command
+                (~(got z-by targets.c.k) parent.candidate-block.m.k)
+              :: If this is the genesis block, we need to check its validity this way
+              %+  check-target:mine  (proof-to-pow:zeke prf.command)
+                  target.candidate-block.m.k
           =.  m.k  (set-pow:min prf.command)
           =.  m.k  set-digest:min
           (heard-block /poke/miner now candidate-block.m.k eny)
@@ -913,11 +916,12 @@
           ::    once a genesis block has been received.
           ::    """
           =.  m.k  (set-mining:min p.command)
-          `k
+          :: try to mine a genesis immediately
+          (do-mine (hash-noun-varlen:tip5:zeke [%nonce eny]))
         ::~&  >  'generation of candidate blocks enabled.'
         =.  m.k  (set-mining:min p.command)
         =.  m.k  (heard-new-block:min c.k p.k now)
-        `k
+        (do-mine (hash-noun-varlen:tip5:zeke [%nonce eny]))
       ::
       ++  do-timer
         ::TODO post-dumbnet: only rerequest transactions a max of once/twice (maybe an admin param)
