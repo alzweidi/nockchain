@@ -12,8 +12,14 @@ use crate::jets::mega_jets::*;
 use crate::jets::memory_table_jets::*;
 use crate::jets::tip5_jets::*;
 use crate::jets::verifier_jets::*;
+use crate::domain_cache::{bp_shift_cached_jet, bp_intercosate_cached_jet, init_domain_cache, print_cache_stats};
 
 pub fn produce_prover_hot_state() -> Vec<HotEntry> {
+    eprintln!("[HOT] Producing prover hot state with {} cached jets", DOMAIN_CACHE_JETS.len());
+    
+    // Initialize domain cache when creating hot state
+    init_domain_cache();
+    
     let mut jets: Vec<HotEntry> = Vec::new();
     jets.extend(BASE_FIELD_JETS);
     jets.extend(BASE_POLY_JETS);
@@ -23,8 +29,14 @@ pub fn produce_prover_hot_state() -> Vec<HotEntry> {
     jets.extend(XTRA_JETS);
     jets.extend(EXTENSION_FIELD_JETS);
     jets.extend(ZKVM_TABLE_JETS);
+    jets.extend(DOMAIN_CACHE_JETS);
 
     jets
+}
+
+/// Dump cache statistics (for debugging)
+pub fn dump_cache_stats() {
+    print_cache_stats();
 }
 
 pub const ZKVM_TABLE_JETS: &[HotEntry] = &[
@@ -89,6 +101,7 @@ pub const ZKVM_TABLE_JETS: &[HotEntry] = &[
         compute_mega_extend_jet,
     ),
 ];
+
 pub const XTRA_JETS: &[HotEntry] = &[
     (
         &[
@@ -611,3 +624,10 @@ pub const CURVE_JETS: &[HotEntry] = &[(
     1,
     ch_scal_jet,
 )];
+
+pub const DOMAIN_CACHE_JETS: &[HotEntry] = &[
+    // Replace bp-shift with cached version
+    (&[K_138, Left(b"two"), Left(b"bp-shift")], 1, bp_shift_cached_jet),
+    // Replace bp-intercosate with cached version  
+    (&[K_138, Left(b"two"), Left(b"bp-intercosate")], 1, bp_intercosate_cached_jet),
+];
