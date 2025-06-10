@@ -5,11 +5,11 @@ use lazy_static::lazy_static;
 use nockvm::jets::Result;
 use nockvm::jets::util::slot;
 use nockvm::interpreter::Context;
-use nockvm::mem::NockStack;
-use nockvm::noun::{Atom, IndirectAtom, Noun, D, T};
+use nockvm::noun::{IndirectAtom, Noun};
 
 use crate::form::math::bpoly::{bp_shift, bp_ntt};
 use crate::form::{Belt, BPolySlice};
+use crate::form::poly::Poly;
 use crate::hand::handle::{new_handle_mut_slice, finalize_poly};
 use crate::jets::utils::jet_err;
 use crate::noun::noun_ext::NounExt;
@@ -131,7 +131,7 @@ pub fn bp_shift_cached_jet(context: &mut Context, subject: Noun) -> Result {
         return jet_err();
     };
     
-    let poly_len = bp_poly.len();
+    let poly_len = bp_poly.0.len();
     let offset = c_belt.0 as usize;
     
     // Update call counter
@@ -171,7 +171,7 @@ pub fn bp_shift_cached_jet(context: &mut Context, subject: Noun) -> Result {
         eprintln!("[DOMAIN_CACHE] Falling back to original bp_shift implementation");
         
         let (res_atom, res_poly): (IndirectAtom, &mut [Belt]) =
-            new_handle_mut_slice(&mut context.stack, Some(bp_poly.len()));
+            new_handle_mut_slice(&mut context.stack, Some(bp_poly.0.len()));
         bp_shift(bp_poly.0, &c_belt, res_poly);
         
         let res_cell = finalize_poly(&mut context.stack, Some(res_poly.len()), res_atom);
@@ -193,7 +193,7 @@ pub fn bp_intercosate_cached_jet(context: &mut Context, subject: Noun) -> Result
         return jet_err();
     };
     
-    let order_u64 = order.as_u64()?;
+    let order_u64 = order.as_u64_ref()?;
     
     let Ok(values_poly) = BPolySlice::try_from(values) else {
         eprintln!("[DOMAIN_CACHE] bp_intercosate_cached_jet: Invalid values type");
@@ -206,8 +206,8 @@ pub fn bp_intercosate_cached_jet(context: &mut Context, subject: Noun) -> Result
         return jet_err(); // Order must be power of 2
     }
     
-    if values_poly.len() != order_u64 as usize {
-        eprintln!("[DOMAIN_CACHE] bp_intercosate_cached_jet: Values length {} != order {}", values_poly.len(), order_u64);
+    if values_poly.0.len() != order_u64 as usize {
+        eprintln!("[DOMAIN_CACHE] bp_intercosate_cached_jet: Values length {} != order {}", values_poly.0.len(), order_u64);
         return jet_err(); // Values must match order
     }
     
@@ -220,11 +220,11 @@ pub fn bp_intercosate_cached_jet(context: &mut Context, subject: Noun) -> Result
         }
     }
     
-    eprintln!("[DOMAIN_CACHE] bp_intercosate_cached_jet called with order={}, offset={}", order_u64, offset.as_u64()?);
+    eprintln!("[DOMAIN_CACHE] bp_intercosate_cached_jet called with order={}, offset={}", order_u64, offset.as_u64_ref()?);
     
     // Check if we can use cached twiddle factors for IFFT
     let cache = DOMAIN_CACHE.lock().unwrap();
-    let cache_key = (order_u64 as usize, offset.as_u64()? as usize);
+    let cache_key = (order_u64 as usize, offset.as_u64_ref()? as usize);
     
     if let Some(domain_data) = cache.domains.get(&cache_key) {
         eprintln!("[DOMAIN_CACHE] Cache HIT for bp_intercosate domain");
