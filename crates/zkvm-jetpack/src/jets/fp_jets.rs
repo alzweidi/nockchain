@@ -1,13 +1,12 @@
 use nockvm::interpreter::Context;
 use nockvm::jets::util::slot;
 use nockvm::jets::Result;
-use nockvm::noun::{Atom, IndirectAtom, Noun, D, T};
+use nockvm::noun::{IndirectAtom, Noun, D, T};
 
 use crate::form::math::fext::*;
 use crate::form::poly::*;
 use crate::hand::handle::*;
 use crate::jets::utils::jet_err;
-use crate::noun::noun_ext::{AtomExt, NounExt};
 
 // Helper function to convert fpoly to list (for debugging/testing)
 pub fn fpoly_to_list_jet(context: &mut Context, subject: Noun) -> Result {
@@ -36,7 +35,7 @@ pub fn fpoly_to_list(context: &mut Context, sam: Noun) -> Result {
         bytes.extend_from_slice(&felt.0[1].0.to_le_bytes());
         bytes.extend_from_slice(&felt.0[2].0.to_le_bytes());
         
-        let res_atom = unsafe { IndirectAtom::new_raw_bytes(&mut context.stack, bytes.as_slice()) };
+        let res_atom = unsafe { IndirectAtom::new_raw_bytes(&mut context.stack, bytes.len(), bytes.as_ptr()) };
         res_list = T(&mut context.stack, &[res_atom.as_noun(), res_list]);
     }
 
@@ -172,7 +171,7 @@ pub fn fp_eval_jet(context: &mut Context, subject: Noun) -> Result {
     bytes.extend_from_slice(&result.0[1].0.to_le_bytes());
     bytes.extend_from_slice(&result.0[2].0.to_le_bytes());
     
-    let res_atom = unsafe { IndirectAtom::new_raw_bytes(&mut context.stack, bytes.as_slice()) };
+    let res_atom = unsafe { IndirectAtom::new_raw_bytes(&mut context.stack, bytes.len(), bytes.as_ptr()) };
     Ok(res_atom.as_noun())
 }
 
@@ -283,12 +282,14 @@ fn fpadd_poly(p: &[Felt], q: &[Felt], res: &mut [Felt]) {
 
     // Add p
     for i in 0..lp {
-        fadd(&p[i], &res[i], &mut res[i]);
+        let mut temp = res[i];
+        fadd(&p[i], &temp, &mut res[i]);
     }
 
     // Add q
     for i in 0..lq {
-        fadd(&q[i], &res[i], &mut res[i]);
+        let mut temp = res[i];
+        fadd(&q[i], &temp, &mut res[i]);
     }
 }
 
@@ -312,14 +313,16 @@ fn fpsub_poly(p: &[Felt], q: &[Felt], res: &mut [Felt]) {
 
     // Add p
     for i in 0..lp {
-        fadd(&p[i], &res[i], &mut res[i]);
+        let mut temp = res[i];
+        fadd(&p[i], &temp, &mut res[i]);
     }
 
     // Subtract q
     for i in 0..lq {
         let mut neg_q = Felt::zero();
         fneg(&q[i], &mut neg_q);
-        fadd(&neg_q, &res[i], &mut res[i]);
+        let mut temp = res[i];
+        fadd(&neg_q, &temp, &mut res[i]);
     }
 }
 
@@ -349,7 +352,8 @@ fn fpmul_poly(p: &[Felt], q: &[Felt], res: &mut [Felt]) {
         for j in 0..lq {
             let mut prod = Felt::zero();
             fmul(&p[i], &q[j], &mut prod);
-            fadd(&prod, &res[i + j], &mut res[i + j]);
+            let mut temp = res[i + j];
+            fadd(&prod, &temp, &mut res[i + j]);
         }
     }
 }
@@ -400,8 +404,6 @@ fn interpolate_poly(domain: &[Felt], values: &[Felt], res: &mut [Felt]) {
 
     // For each point, compute its Lagrange basis polynomial
     for i in 0..n {
-        let mut basis = vec![Felt::one()];
-        
         // Compute the denominator for normalization
         let mut denom = Felt::one();
         for j in 0..n {
@@ -419,7 +421,8 @@ fn interpolate_poly(domain: &[Felt], values: &[Felt], res: &mut [Felt]) {
         fdiv(&values[i], &denom, &mut scale);
         
         // Add to result (simplified version)
-        fadd(&scale, &res[0], &mut res[0]);
+        let mut temp = res[0];
+        fadd(&scale, &temp, &mut res[0]);
     }
 }
 
@@ -449,7 +452,8 @@ fn fpcompose_poly(p: &[Felt], q: &[Felt], res: &mut [Felt]) {
             for k in 0..q.len() {
                 let mut prod = Felt::zero();
                 fmul(&q_power[j], &q[k], &mut prod);
-                fadd(&prod, &new_q_power[j + k], &mut new_q_power[j + k]);
+                let mut temp = new_q_power[j + k];
+                fadd(&prod, &temp, &mut new_q_power[j + k]);
             }
         }
         
@@ -459,7 +463,8 @@ fn fpcompose_poly(p: &[Felt], q: &[Felt], res: &mut [Felt]) {
         for j in 0..std::cmp::min(q_power.len(), res.len()) {
             let mut term = Felt::zero();
             fmul(&p[i], &q_power[j], &mut term);
-            fadd(&term, &res[j], &mut res[j]);
+            let mut temp = res[j];
+            fadd(&term, &temp, &mut res[j]);
         }
     }
 }
@@ -471,10 +476,15 @@ impl TryFrom<Noun> for Felt {
     fn try_from(noun: Noun) -> std::result::Result<Self, Self::Error> {
         // A Felt is represented as an atom with 3 u64s (24 bytes)
         let atom = noun.as_atom().map_err(|_| ())?;
-        let bytes = atom.as_bytes();
         
-        if bytes.len() != 24 {
-            return Err(());
+        // Get raw bytes from atom
+        let (mut bytes, _) = atom.as_bytes_alloc();
+        
+        // Ensure we have exactly 24 bytes
+        if bytes.len() < 24 {
+            bytes.resize(24, 0);
+        } else if bytes.len() > 24 {
+            bytes.truncate(24);
         }
 
         let mut belts = [Belt(0); 3];
