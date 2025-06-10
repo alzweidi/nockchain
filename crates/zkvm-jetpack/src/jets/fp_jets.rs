@@ -7,6 +7,7 @@ use crate::form::math::fext::*;
 use crate::form::poly::*;
 use crate::hand::handle::*;
 use crate::jets::utils::jet_err;
+use crate::noun::noun_ext::NounExt;
 
 // Helper function to convert fpoly to list (for debugging/testing)
 pub fn fpoly_to_list_jet(context: &mut Context, subject: Noun) -> Result {
@@ -110,7 +111,7 @@ pub fn fp_scal_jet(context: &mut Context, subject: Noun) -> Result {
     };
 
     // Extract the Felt scalar from c
-    let Ok(c_felt) = Felt::try_from(c) else {
+    let Ok(c_felt) = c.as_felt() else {
         return jet_err();
     };
 
@@ -159,11 +160,9 @@ pub fn fp_eval_jet(context: &mut Context, subject: Noun) -> Result {
         return jet_err();
     };
 
-    let Ok(x_felt) = Felt::try_from(x) else {
-        return jet_err();
-    };
-
-    let result = fpeval_poly(fp_poly.data(), &x_felt);
+    let x_felt = x.as_felt()?;
+    
+    let result = fpeval_poly(fp_poly.data(), x_felt);
     
     // Convert Felt result to Atom
     let mut bytes = Vec::with_capacity(24);
@@ -282,13 +281,13 @@ fn fpadd_poly(p: &[Felt], q: &[Felt], res: &mut [Felt]) {
 
     // Add p
     for i in 0..lp {
-        let mut temp = res[i];
+        let temp = res[i];
         fadd(&p[i], &temp, &mut res[i]);
     }
 
     // Add q
     for i in 0..lq {
-        let mut temp = res[i];
+        let temp = res[i];
         fadd(&q[i], &temp, &mut res[i]);
     }
 }
@@ -313,7 +312,7 @@ fn fpsub_poly(p: &[Felt], q: &[Felt], res: &mut [Felt]) {
 
     // Add p
     for i in 0..lp {
-        let mut temp = res[i];
+        let temp = res[i];
         fadd(&p[i], &temp, &mut res[i]);
     }
 
@@ -321,7 +320,7 @@ fn fpsub_poly(p: &[Felt], q: &[Felt], res: &mut [Felt]) {
     for i in 0..lq {
         let mut neg_q = Felt::zero();
         fneg(&q[i], &mut neg_q);
-        let mut temp = res[i];
+        let temp = res[i];
         fadd(&neg_q, &temp, &mut res[i]);
     }
 }
@@ -352,7 +351,7 @@ fn fpmul_poly(p: &[Felt], q: &[Felt], res: &mut [Felt]) {
         for j in 0..lq {
             let mut prod = Felt::zero();
             fmul(&p[i], &q[j], &mut prod);
-            let mut temp = res[i + j];
+            let temp = res[i + j];
             fadd(&prod, &temp, &mut res[i + j]);
         }
     }
@@ -421,7 +420,7 @@ fn interpolate_poly(domain: &[Felt], values: &[Felt], res: &mut [Felt]) {
         fdiv(&values[i], &denom, &mut scale);
         
         // Add to result (simplified version)
-        let mut temp = res[0];
+        let temp = res[0];
         fadd(&scale, &temp, &mut res[0]);
     }
 }
@@ -452,7 +451,7 @@ fn fpcompose_poly(p: &[Felt], q: &[Felt], res: &mut [Felt]) {
             for k in 0..q.len() {
                 let mut prod = Felt::zero();
                 fmul(&q_power[j], &q[k], &mut prod);
-                let mut temp = new_q_power[j + k];
+                let temp = new_q_power[j + k];
                 fadd(&prod, &temp, &mut new_q_power[j + k]);
             }
         }
@@ -463,38 +462,8 @@ fn fpcompose_poly(p: &[Felt], q: &[Felt], res: &mut [Felt]) {
         for j in 0..std::cmp::min(q_power.len(), res.len()) {
             let mut term = Felt::zero();
             fmul(&p[i], &q_power[j], &mut term);
-            let mut temp = res[j];
+            let temp = res[j];
             fadd(&term, &temp, &mut res[j]);
         }
-    }
-}
-
-// Helper trait implementation for Felt conversion from Noun
-impl TryFrom<Noun> for Felt {
-    type Error = ();
-
-    fn try_from(noun: Noun) -> std::result::Result<Self, Self::Error> {
-        // A Felt is represented as an atom with 3 u64s (24 bytes)
-        let atom = noun.as_atom().map_err(|_| ())?;
-        
-        // Get raw bytes from atom
-        let (mut bytes, _) = atom.as_bytes_alloc();
-        
-        // Ensure we have exactly 24 bytes
-        if bytes.len() < 24 {
-            bytes.resize(24, 0);
-        } else if bytes.len() > 24 {
-            bytes.truncate(24);
-        }
-
-        let mut belts = [Belt(0); 3];
-        for i in 0..3 {
-            let start = i * 8;
-            let mut buf = [0u8; 8];
-            buf.copy_from_slice(&bytes[start..start + 8]);
-            belts[i] = Belt(u64::from_le_bytes(buf));
-        }
-
-        Ok(Felt(belts))
     }
 }
