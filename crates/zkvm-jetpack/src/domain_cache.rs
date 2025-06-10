@@ -1,24 +1,23 @@
-use anyhow::Result;
-use nockapp::{
-    noun::{Noun, slot},
-    stack::NockStack,
-};
-use nockvm::{jets::jet_err, noun::IndirectAtom, stack::Context};
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use lazy_static::lazy_static;
 
-use crate::jets::bp_jets::{BPolySlice, Belt, bp_shift, finalize_poly, new_handle_mut_slice};
-use crate::jets::utils::new_handle_mut_poly_slice;
+use nockvm::jets::Result;
+use nockvm::jets::util::slot;
+use nockvm::interpreter::Context;
+use nockvm::mem::NockStack;
+use nockvm::noun::{Atom, IndirectAtom, Noun, D, T};
 
-/// Field element type matching the Hoon belt type
-type FieldElement = u64;
+use crate::form::math::bpoly::{bp_shift, bp_ntt};
+use crate::form::{Belt, BPolySlice};
+use crate::hand::handle::{new_handle_mut_slice, finalize_poly};
+use crate::jets::utils::jet_err;
+use crate::noun::noun_ext::NounExt;
 
-/// Cached domain data for a specific domain size
+/// Cached domain data for a specific domain size and offset
 #[derive(Clone, Debug)]
 pub struct DomainData {
-    /// Powers of the offset element [1, c, c^2, ..., c^(n-1)]
-    /// For offset=1, this is just [1, 1, 1, ..., 1]
+    /// Precomputed powers of offset: [1, offset, offset^2, ..., offset^(n-1)]
     pub powers: Vec<Belt>,
     
     /// FFT twiddle factors for this domain size
@@ -29,26 +28,20 @@ pub struct DomainData {
 }
 
 /// Global domain cache shared across all mining attempts
-lazy_static! {
-    static ref DOMAIN_CACHE: Arc<Mutex<DomainCache>> = Arc::new(Mutex::new(DomainCache::new()));
-}
-
-/// Cache for pre-computed domain elements used in polynomial interpolation
 pub struct DomainCache {
-    /// Map from (domain_size, offset) -> precomputed domain data
-    /// For offset=1 (the common case), we can heavily cache
-    domains: HashMap<(usize, usize), DomainData>,
+    /// Map from (domain_size, offset) to precomputed domain data
+    pub domains: HashMap<(usize, usize), DomainData>,
     
     /// Cache statistics
-    hits: u64,
-    misses: u64,
-    bp_shift_calls: u64,
-    bp_intercosate_calls: u64,
+    pub hits: u64,
+    pub misses: u64,
+    pub bp_shift_calls: u64,
+    pub bp_intercosate_calls: u64,
 }
 
-impl DomainCache {
-    /// Create a new empty domain cache
-    pub fn new() -> Self {
+lazy_static! {
+    /// Global domain cache instance
+    pub static ref DOMAIN_CACHE: Arc<Mutex<DomainCache>> = {
         let mut cache = DomainCache {
             domains: HashMap::new(),
             hits: 0,
@@ -57,7 +50,8 @@ impl DomainCache {
             bp_intercosate_calls: 0,
         };
         
-        // Pre-populate common domain sizes used in STARK proofs
+        // Precompute common domain sizes for mining
+        // These are powers of 2 from 32 to 4096
         eprintln!("[DOMAIN_CACHE] Initializing with common domain sizes...");
         for size_pow in 5..=12 {  // 2^5 = 32 to 2^12 = 4096
             let size = 1 << size_pow;
@@ -66,11 +60,13 @@ impl DomainCache {
         }
         
         eprintln!("[DOMAIN_CACHE] Initialization complete - {} domains precomputed", cache.domains.len());
-        cache
-    }
-    
+        Arc::new(Mutex::new(cache))
+    };
+}
+
+impl DomainCache {
     /// Precompute and cache domain data for a given size and offset
-    fn precompute_domain(&mut self, size: usize, offset: usize) {
+    pub fn precompute_domain(&mut self, size: usize, offset: usize) {
         let key = (size, offset);
         
         // Skip if already cached
@@ -124,12 +120,12 @@ impl DomainCache {
     }
 }
 
-/// Jet for bp-shift that uses cached domain powers
+/// Jet for bp-shift that leverages domain cache
 pub fn bp_shift_cached_jet(context: &mut Context, subject: Noun) -> Result {
     let sam = slot(subject, 6)?;
     let bp = slot(sam, 2)?;
     let c = slot(sam, 3)?;
-
+    
     let (Ok(bp_poly), Ok(c_belt)) = (BPolySlice::try_from(bp), c.as_belt()) else {
         eprintln!("[DOMAIN_CACHE] bp_shift_cached_jet: Invalid input types");
         return jet_err();
