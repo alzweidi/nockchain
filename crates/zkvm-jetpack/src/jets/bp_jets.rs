@@ -1,4 +1,4 @@
-use nockvm::interpreter::{Context, InterpreterError};
+use nockvm::interpreter::Context;
 use nockvm::jets::util::slot;
 use nockvm::jets::Result;
 use nockvm::noun::{Atom, IndirectAtom, Noun, D, T};
