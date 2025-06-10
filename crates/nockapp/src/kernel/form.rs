@@ -1031,6 +1031,7 @@ impl Serf {
 
                 unsafe {
                     self.event_update(eve + 1, cell.tail());
+                    self.context.stack.preserve(&mut fec);
                     self.preserve_event_update_leftovers();
                 }
                 Ok(fec)
