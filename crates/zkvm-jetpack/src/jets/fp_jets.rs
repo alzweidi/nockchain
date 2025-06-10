@@ -55,7 +55,7 @@ pub fn fp_add_jet(context: &mut Context, subject: Noun) -> Result {
 
     let res_len = std::cmp::max(fp_poly.len(), fq_poly.len());
     let (res, res_poly): (IndirectAtom, &mut [Felt]) =
-        new_handle_mut_slice(&mut context.stack, Some(res_len as usize));
+        new_handle_mut_slice(&mut context.stack, Some(res_len));
     
     fpadd_poly(fp_poly.data(), fq_poly.data(), res_poly);
 
@@ -92,7 +92,7 @@ pub fn fp_sub_jet(context: &mut Context, subject: Noun) -> Result {
 
     let res_len = std::cmp::max(p_poly.len(), q_poly.len());
     let (res, res_poly): (IndirectAtom, &mut [Felt]) =
-        new_handle_mut_slice(&mut context.stack, Some(res_len as usize));
+        new_handle_mut_slice(&mut context.stack, Some(res_len));
     
     fpsub_poly(p_poly.data(), q_poly.data(), res_poly);
 
@@ -118,7 +118,7 @@ pub fn fp_scal_jet(context: &mut Context, subject: Noun) -> Result {
     let (res, res_poly): (IndirectAtom, &mut [Felt]) =
         new_handle_mut_slice(&mut context.stack, Some(fp_poly.len()));
     
-    fpscal_poly(&c_felt, fp_poly.data(), res_poly);
+    fpscal_poly(c_felt, fp_poly.data(), res_poly);
 
     let res_cell = finalize_poly(&mut context.stack, Some(res_poly.len()), res);
     Ok(res_cell)
@@ -160,9 +160,11 @@ pub fn fp_eval_jet(context: &mut Context, subject: Noun) -> Result {
         return jet_err();
     };
 
-    let x_felt = x.as_felt()?;
+    let Ok(x_felt_ref) = x.as_felt() else {
+        return jet_err();
+    };
     
-    let result = fpeval_poly(fp_poly.data(), x_felt);
+    let result = fpeval_poly(fp_poly.data(), x_felt_ref);
     
     // Convert Felt result to Atom
     let mut bytes = Vec::with_capacity(24);
