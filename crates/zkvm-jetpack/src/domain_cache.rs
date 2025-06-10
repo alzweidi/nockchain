@@ -228,13 +228,15 @@ pub fn bp_intercosate_cached_jet(context: &mut Context, subject: Noun) -> Result
     
     if let Some(domain_data) = cache.domains.get(&cache_key) {
         eprintln!("[DOMAIN_CACHE] Cache HIT for bp_intercosate domain");
+        // Clone the data we need before dropping the lock
+        let inv_twiddles = domain_data.inv_twiddles.clone();
         drop(cache); // Release lock early
         
         // Perform IFFT using cached inverse twiddle factors
-        let ifft_result = if !domain_data.inv_twiddles.is_empty() {
+        let ifft_result = if !inv_twiddles.is_empty() {
             eprintln!("[DOMAIN_CACHE] Using cached twiddle factors for IFFT");
             // Use cached twiddle factors
-            bp_ntt(values_poly.0, &domain_data.inv_twiddles[0])
+            bp_ntt(values_poly.0, &inv_twiddles[0])
         } else {
             eprintln!("[DOMAIN_CACHE] Computing inverse root for IFFT");
             // Fallback: compute inverse root
