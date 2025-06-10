@@ -2,12 +2,18 @@ use either::Either::*;
 use nockvm::jets::hot::{HotEntry, K_138};
 
 use crate::jets::base_jets::*;
-use crate::jets::bp_jets::*;
+use crate::jets::bp_jets::{
+    bpoly_to_list_jet, bpadd_jet, bpneg_jet, bpsub_jet, bpscal_jet, bpmul_jet,
+    bp_hadamard_jet, bpdvr_jet, bp_ntt_jet, bp_fft_jet, bp_shift_jet, bp_coseword_jet
+};
 use crate::jets::cheetah_jets::*;
 use crate::jets::compute_table_jets::*;
 use crate::jets::crypto_jets::*;
 use crate::jets::fext_jets::*;
-use crate::jets::fp_jets::*;
+use crate::jets::fp_jets::{
+    fpoly_to_list_jet, fp_add_jet, fp_neg_jet, fp_sub_jet, fp_scal_jet, fp_mul_jet,
+    fp_eval_jet, fp_fft_jet, fp_ifft_jet, interpolate_jet, fpcompose_jet
+};
 use crate::jets::mary_jets::*;
 use crate::jets::mega_jets::*;
 use crate::jets::memory_table_jets::*;
