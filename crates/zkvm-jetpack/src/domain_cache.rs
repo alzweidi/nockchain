@@ -193,7 +193,7 @@ pub fn bp_intercosate_cached_jet(context: &mut Context, subject: Noun) -> Result
         return jet_err();
     };
     
-    let order_u64 = order.as_u64_ref()?;
+    let order_u64 = order.as_atom()?.as_u64()?;
     
     let Ok(values_poly) = BPolySlice::try_from(values) else {
         eprintln!("[DOMAIN_CACHE] bp_intercosate_cached_jet: Invalid values type");
@@ -220,11 +220,11 @@ pub fn bp_intercosate_cached_jet(context: &mut Context, subject: Noun) -> Result
         }
     }
     
-    eprintln!("[DOMAIN_CACHE] bp_intercosate_cached_jet called with order={}, offset={}", order_u64, offset.as_u64_ref()?);
+    eprintln!("[DOMAIN_CACHE] bp_intercosate_cached_jet called with order={}, offset={}", order_u64, offset.as_atom()?.as_u64()?);
     
     // Check if we can use cached twiddle factors for IFFT
     let cache = DOMAIN_CACHE.lock().unwrap();
-    let cache_key = (order_u64 as usize, offset.as_u64_ref()? as usize);
+    let cache_key = (order_u64 as usize, offset.as_atom()?.as_u64()? as usize);
     
     if let Some(domain_data) = cache.domains.get(&cache_key) {
         eprintln!("[DOMAIN_CACHE] Cache HIT for bp_intercosate domain");
