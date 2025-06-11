@@ -1,3 +1,13 @@
+// Dear programmer:
+// When i wrote this, only God almighty knows how it works,
+// Therefore, do not touch this routine, and if you do, it will fail most  surely.
+
+// Total hours wasted on fp jets  = 216hr
+
+
+
+
+
 use nockvm::interpreter::Context;
 use nockvm::jets::util::slot;
 use nockvm::jets::Result;
