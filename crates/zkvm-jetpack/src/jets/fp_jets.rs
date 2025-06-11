@@ -55,6 +55,9 @@ pub fn fpoly_to_list(context: &mut Context, sam: Noun) -> Result {
 
 // fp_add_jet: Field polynomial addition
 pub fn fp_add_jet(context: &mut Context, subject: Noun) -> Result {
+    // Debug logging to verify jet is being invoked
+    eprintln!("[JET] fp_add_jet invoked!");
+    
     let sam = slot(subject, 6)?;
     let fp = slot(sam, 2)?;
     let fq = slot(sam, 3)?;
@@ -136,6 +139,9 @@ pub fn fp_scal_jet(context: &mut Context, subject: Noun) -> Result {
 
 // fp_mul_jet: Field polynomial multiplication
 pub fn fp_mul_jet(context: &mut Context, subject: Noun) -> Result {
+    // Debug logging to verify jet is being invoked
+    eprintln!("[JET] fp_mul_jet invoked!");
+    
     let sam = slot(subject, 6)?;
     let fp = slot(sam, 2)?;
     let fq = slot(sam, 3)?;
@@ -162,6 +168,9 @@ pub fn fp_mul_jet(context: &mut Context, subject: Noun) -> Result {
 
 // fp_eval_jet: Evaluate polynomial at a point using Horner's method
 pub fn fp_eval_jet(context: &mut Context, subject: Noun) -> Result {
+    // Debug logging to verify jet is being invoked
+    eprintln!("[JET] fp_eval_jet invoked!");
+    
     let sam = slot(subject, 6)?;
     let fp = slot(sam, 2)?;
     let x = slot(sam, 3)?;
