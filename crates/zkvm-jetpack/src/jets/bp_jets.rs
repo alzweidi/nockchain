@@ -189,14 +189,21 @@ pub fn bpdvr_jet(context: &mut Context, subject: Noun) -> Result {
 }
 
 pub fn bp_ntt_jet(context: &mut Context, subject: Noun) -> Result {
+    eprintln!("DEBUG: bp_ntt_jet called");
+    
     let sam = slot(subject, 6)?;
     let bp = slot(sam, 2)?;
     let root = slot(sam, 3)?;
 
+    eprintln!("DEBUG: bp_ntt_jet - extracted args");
+
     let (Ok(bp_poly), Ok(root_atom)) = (BPolySlice::try_from(bp), root.as_atom()) else {
+        eprintln!("DEBUG: bp_ntt_jet failed - type conversion error");
         return jet_err();
     };
     let root_64 = root_atom.as_u64()?;
+    eprintln!("DEBUG: bp_ntt_jet - calling bp_ntt with root={}", root_64);
+    
     let returned_bpoly = bp_ntt(bp_poly.0, &Belt(root_64));
     // TODO: preallocate and pass res buffer into bp_ntt?
     let (res_atom, res_poly): (IndirectAtom, &mut [Belt]) =
