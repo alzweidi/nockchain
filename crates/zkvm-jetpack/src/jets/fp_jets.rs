@@ -59,35 +59,17 @@ pub fn fp_add_jet(context: &mut Context, subject: Noun) -> Result {
     let fp = slot(sam, 2)?;
     let fq = slot(sam, 3)?;
 
-    // Debug logging to understand the structure
-    eprintln!("DEBUG fp_add_jet: fp = {:?}", fp);
-    eprintln!("DEBUG fp_add_jet: fq = {:?}", fq);
-    
-    // Try to get cells from the nouns
-    let fp_cell = fp.as_cell();
-    let fq_cell = fq.as_cell();
-    
-    if let (Ok(fp_cell), Ok(fq_cell)) = (fp_cell, fq_cell) {
-        eprintln!("DEBUG fp_add_jet: fp_cell head = {:?}, tail = {:?}", fp_cell.head(), fp_cell.tail());
-        eprintln!("DEBUG fp_add_jet: fq_cell head = {:?}, tail = {:?}", fq_cell.head(), fq_cell.tail());
-    }
-
     let (Ok(fp_poly), Ok(fq_poly)) = (FPolySlice::try_from(fp), FPolySlice::try_from(fq)) else {
-        eprintln!("DEBUG fp_add_jet: Failed to convert fp or fq to FPolySlice");
         return jet_err();
     };
-
-    eprintln!("DEBUG fp_add_jet: Successfully converted to FPolySlice, fp_len={}, fq_len={}", fp_poly.len(), fq_poly.len());
 
     let res_len = std::cmp::max(fp_poly.len(), fq_poly.len());
     let (res, res_poly): (IndirectAtom, &mut [Felt]) =
         new_handle_mut_slice(&mut context.stack, Some(res_len));
-    
     fpadd_poly(fp_poly.data(), fq_poly.data(), res_poly);
 
     let res_cell = finalize_poly(&mut context.stack, Some(res_poly.len()), res);
 
-    eprintln!("DEBUG fp_add_jet: Returning result = {:?}", res_cell);
     Ok(res_cell)
 }
 
