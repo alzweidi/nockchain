@@ -127,6 +127,69 @@ impl HoonMap {
         }
     }
 }
+
+use std::convert::TryFrom;
+
+impl TryFrom<Noun> for HoonList {
+    type Error = ();
+
+    fn try_from(noun: Noun) -> Result<Self, Self::Error> {
+        if noun.is_cell() {
+            Ok(HoonList {
+                next: Some(noun.as_cell().map_err(|_| ())?)
+            })
+        } else if noun.is_zero() {
+            // Empty list is represented as 0
+            Ok(HoonList { next: None })
+        } else {
+            Err(())
+        }
+    }
+}
+
+impl TryFrom<Cell> for HoonMap {
+    type Error = ();
+
+    fn try_from(cell: Cell) -> Result<Self, Self::Error> {
+        // A map node has the structure [node left right]
+        let node = cell.head();
+        let tail = cell.tail();
+        
+        if let Ok(tail_cell) = tail.as_cell() {
+            let left = tail_cell.head();
+            let right = tail_cell.tail();
+            
+            Ok(HoonMap {
+                node,
+                left: left.as_cell().ok(),
+                right: right.as_cell().ok(),
+            })
+        } else {
+            Err(())
+        }
+    }
+}
+
+impl TryFrom<Noun> for HoonMap {
+    type Error = ();
+
+    fn try_from(noun: Noun) -> Result<Self, Self::Error> {
+        if let Ok(cell) = noun.as_cell() {
+            HoonMap::try_from(cell)
+        } else {
+            Err(())
+        }
+    }
+}
+
+impl From<Noun> for HoonMapIter {
+    fn from(noun: Noun) -> Self {
+        HoonMapIter {
+            stack: vec![noun.as_cell().ok()],
+        }
+    }
+}
+
 #[allow(dead_code)]
 #[derive(Clone)]
 pub struct HoonMapIter {
