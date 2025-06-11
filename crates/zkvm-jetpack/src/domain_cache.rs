@@ -1,3 +1,10 @@
+// Hello.
+// I'm not even sure this bs will help you solve a block faster
+// Don't play with;
+// Wasted hours = 14hr
+
+
+
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use lazy_static::lazy_static;
