@@ -209,7 +209,6 @@ pub const XTRA_JETS: &[HotEntry] = &[
 ];
 
 pub const EXTENSION_FIELD_JETS: &[HotEntry] = &[
-    /*
     (
         &[
             K_138,
@@ -225,7 +224,6 @@ pub const EXTENSION_FIELD_JETS: &[HotEntry] = &[
         1,
         bp_ntt_jet,
     ),
-    */
     /*
     (
         &[
@@ -765,7 +763,6 @@ pub const CURVE_JETS: &[HotEntry] = &[(
 )];
 
 pub const BELT_POLY_JETS: &[HotEntry] = &[
-    /*
     (
         &[
             K_138,
@@ -885,7 +882,6 @@ pub const BELT_POLY_JETS: &[HotEntry] = &[
         1,
         bp_mul_jet,
     ),
-    /*
     (
         &[
             K_138,
@@ -900,21 +896,6 @@ pub const BELT_POLY_JETS: &[HotEntry] = &[
         1,
         bp_ntt_jet,
     ),
-    */
-    // (
-    //     &[
-    //         K_138,
-    //         Left(b"one"),
-    //         Left(b"two"),
-    //         Left(b"tri"),
-    //         Left(b"qua"),
-    //         Left(b"pen"),
-    //         Left(b"zeke"),
-    //         Left(b"bp-fft"),
-    //     ],
-    //     1,
-    //     bp_fft_jet,
-    // ),
     (
         &[
             K_138,
@@ -959,6 +940,21 @@ pub const BELT_POLY_JETS: &[HotEntry] = &[
         ],
         1,
         bpdvr_jet,
+    ),
+    /*
+    (
+        &[
+            K_138,
+            Left(b"one"),
+            Left(b"two"),
+            Left(b"tri"),
+            Left(b"qua"),
+            Left(b"pen"),
+            Left(b"zeke"),
+            Left(b"bp-fft"),
+        ],
+        1,
+        bp_fft_jet,
     ),
     */
 ];
