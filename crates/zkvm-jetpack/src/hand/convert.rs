@@ -250,21 +250,8 @@ impl TryFrom<Cell> for FPolySlice<'_> {
     fn try_from(c: Cell) -> std::result::Result<Self, Self::Error> {
         let head = c.head().as_atom();
         let tail = c.tail().as_atom();
-        
-        eprintln!("DEBUG FPolySlice::try_from: head = {:?}, tail = {:?}", head, tail);
-        
         if let (Ok(head), Ok(tail)) = (head, tail) {
-            let len32_result = head.as_u32();
-            eprintln!("DEBUG FPolySlice::try_from: head.as_u32() = {:?}", len32_result);
-            
-            let len32 = len32_result?;
-            
-            // Check if the data size is appropriate for Felt elements
-            let expected_size = len32 as usize * 3; // Each Felt is 3 u64s
-            let actual_size = tail.size();
-            eprintln!("DEBUG FPolySlice::try_from: len32={}, expected_size={} u64s, actual atom size={} u64s", 
-                     len32, expected_size, actual_size);
-            
+            let len32 = head.as_u32()?;
             let dat_slice: FPolySlice = unsafe {
                 PolySlice(std::slice::from_raw_parts(
                     tail.data_pointer() as *const Felt,
@@ -273,7 +260,6 @@ impl TryFrom<Cell> for FPolySlice<'_> {
             };
             Ok(dat_slice)
         } else {
-            eprintln!("DEBUG FPolySlice::try_from: Failed to convert head or tail to atom");
             jet_err()
         }
     }
