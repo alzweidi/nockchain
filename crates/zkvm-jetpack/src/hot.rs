@@ -885,6 +885,7 @@ pub const BELT_POLY_JETS: &[HotEntry] = &[
         1,
         bp_mul_jet,
     ),
+    /*
     (
         &[
             K_138,
@@ -899,6 +900,7 @@ pub const BELT_POLY_JETS: &[HotEntry] = &[
         1,
         bp_ntt_jet,
     ),
+    */
     // (
     //     &[
     //         K_138,
