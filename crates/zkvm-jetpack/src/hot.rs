@@ -219,7 +219,7 @@ pub const EXTENSION_FIELD_JETS: &[HotEntry] = &[
             Left(b"pen"),
             Left(b"zeke"),
             Left(b"ext-field"),
-            Left(b"bp-ntt"),
+            Left(b"bpntt"),
         ],
         1,
         bp_ntt_jet,
@@ -234,7 +234,7 @@ pub const EXTENSION_FIELD_JETS: &[HotEntry] = &[
             Left(b"pen"),
             Left(b"zeke"),
             Left(b"ext-field"),
-            Left(b"bp-fft"),
+            Left(b"bpfft"),
         ],
         1,
         bp_fft_jet,
@@ -249,7 +249,7 @@ pub const EXTENSION_FIELD_JETS: &[HotEntry] = &[
             Left(b"pen"),
             Left(b"zeke"),
             Left(b"ext-field"),
-            Left(b"bp-shift"),
+            Left(b"bpshift"),
         ],
         1,
         bp_shift_jet,
@@ -264,7 +264,7 @@ pub const EXTENSION_FIELD_JETS: &[HotEntry] = &[
             Left(b"pen"),
             Left(b"zeke"),
             Left(b"ext-field"),
-            Left(b"bp-coseword"),
+            Left(b"bpcoseword"),
         ],
         1,
         bp_coseword_jet,
@@ -442,7 +442,7 @@ pub const BASE_FIELD_JETS: &[HotEntry] = &[
             Left(b"qua"),
             Left(b"pen"),
             Left(b"zeke"),
-            Left(b"ordered-root"),
+            Left(b"orderedroot"),
         ],
         1,
         ordered_root_jet,
@@ -473,7 +473,7 @@ pub const BASE_POLY_JETS: &[HotEntry] = &[
             Left(b"qua"),
             Left(b"pen"),
             Left(b"zeke"),
-            Left(b"bpoly-to-list"),
+            Left(b"bpolytolist"),
         ],
         1,
         bpoly_to_list_jet,
@@ -557,7 +557,7 @@ pub const BASE_POLY_JETS: &[HotEntry] = &[
             Left(b"qua"),
             Left(b"pen"),
             Left(b"zeke"),
-            Left(b"bp-hadamard"),
+            Left(b"bphadamard"),
         ],
         1,
         bp_hadamard_jet,
@@ -593,6 +593,7 @@ pub const FIELD_POLY_JETS: &[HotEntry] = &[
         1,
         fp_add_jet,
     ),
+    /*
     (
         &[
             K_138,
@@ -691,34 +692,7 @@ pub const FIELD_POLY_JETS: &[HotEntry] = &[
         1,
         fp_ifft_jet,
     ),
-    (
-        &[
-            K_138,
-            Left(b"one"),
-            Left(b"two"),
-            Left(b"tri"),
-            Left(b"qua"),
-            Left(b"pen"),
-            Left(b"zeke"),
-            Left(b"interpolate"),
-        ],
-        1,
-        interpolate_jet,
-    ),
-    (
-        &[
-            K_138,
-            Left(b"one"),
-            Left(b"two"),
-            Left(b"tri"),
-            Left(b"qua"),
-            Left(b"pen"),
-            Left(b"zeke"),
-            Left(b"fpcompose"),
-        ],
-        1,
-        fpcompose_jet,
-    ),
+    */
 ];
 
 pub const ZTD_JETS: &[HotEntry] = &[(
@@ -780,7 +754,7 @@ pub const CURVE_JETS: &[HotEntry] = &[(
         Left(b"cheetah"),
         Left(b"curve"),
         Left(b"affine"),
-        Left(b"ch-scal"),
+        Left(b"chscal"),
     ],
     1,
     ch_scal_jet,
@@ -788,7 +762,7 @@ pub const CURVE_JETS: &[HotEntry] = &[(
 
 pub const DOMAIN_CACHE_JETS: &[HotEntry] = &[
     // Replace bp-shift with cached version
-    (&[K_138, Left(b"two"), Left(b"bp-shift")], 1, bp_shift_cached_jet),
+    (&[K_138, Left(b"two"), Left(b"bpshift")], 1, bp_shift_cached_jet),
     // Replace bp-intercosate with cached version  
-    (&[K_138, Left(b"two"), Left(b"bp-intercosate")], 1, bp_intercosate_cached_jet),
+    (&[K_138, Left(b"two"), Left(b"bpintercosate")], 1, bp_intercosate_cached_jet),
 ];
