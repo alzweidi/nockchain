@@ -209,6 +209,7 @@ pub const XTRA_JETS: &[HotEntry] = &[
 ];
 
 pub const EXTENSION_FIELD_JETS: &[HotEntry] = &[
+    /*
     (
         &[
             K_138,
@@ -224,6 +225,7 @@ pub const EXTENSION_FIELD_JETS: &[HotEntry] = &[
         1,
         bp_ntt_jet,
     ),
+    */
     (
         &[
             K_138,
@@ -239,21 +241,21 @@ pub const EXTENSION_FIELD_JETS: &[HotEntry] = &[
         1,
         bp_fft_jet,
     ),
-    (
-        &[
-            K_138,
-            Left(b"one"),
-            Left(b"two"),
-            Left(b"tri"),
-            Left(b"qua"),
-            Left(b"pen"),
-            Left(b"zeke"),
-            Left(b"ext-field"),
-            Left(b"bpshift"),
-        ],
-        1,
-        bp_shift_jet,
-    ),
+    // (
+    //     &[
+    //         K_138,
+    //         Left(b"one"),
+    //         Left(b"two"),
+    //         Left(b"tri"),
+    //         Left(b"qua"),
+    //         Left(b"pen"),
+    //         Left(b"zeke"),
+    //         Left(b"ext-field"),
+    //         Left(b"bpshift"),
+    //     ],
+    //     1,
+    //     bp_shift_jet,
+    // ),
     (
         &[
             K_138,
@@ -759,6 +761,203 @@ pub const CURVE_JETS: &[HotEntry] = &[(
     1,
     ch_scal_jet,
 )];
+
+pub const BELT_POLY_JETS: &[HotEntry] = &[
+    /*
+    (
+        &[
+            K_138,
+            Left(b"one"),
+            Left(b"two"),
+            Left(b"tri"),
+            Left(b"qua"),
+            Left(b"pen"),
+            Left(b"zeke"),
+            Left(b"ext-field"),
+            Left(b"bpdeg"),
+        ],
+        1,
+        bp_deg_jet,
+    ),
+    (
+        &[
+            K_138,
+            Left(b"one"),
+            Left(b"two"),
+            Left(b"tri"),
+            Left(b"qua"),
+            Left(b"pen"),
+            Left(b"zeke"),
+            Left(b"bpfrob"),
+        ],
+        1,
+        bp_frob_jet,
+    ),
+    (
+        &[
+            K_138,
+            Left(b"one"),
+            Left(b"two"),
+            Left(b"tri"),
+            Left(b"qua"),
+            Left(b"pen"),
+            Left(b"zeke"),
+            Left(b"ext-field"),
+            Left(b"bpval"),
+        ],
+        1,
+        bp_val_jet,
+    ),
+    (
+        &[
+            K_138,
+            Left(b"one"),
+            Left(b"two"),
+            Left(b"tri"),
+            Left(b"qua"),
+            Left(b"pen"),
+            Left(b"zeke"),
+            Left(b"ext-field"),
+            Left(b"bpneg"),
+        ],
+        1,
+        bp_neg_jet,
+    ),
+    (
+        &[
+            K_138,
+            Left(b"one"),
+            Left(b"two"),
+            Left(b"tri"),
+            Left(b"qua"),
+            Left(b"pen"),
+            Left(b"zeke"),
+            Left(b"ext-field"),
+            Left(b"bpadd"),
+        ],
+        1,
+        bp_add_jet,
+    ),
+    (
+        &[
+            K_138,
+            Left(b"one"),
+            Left(b"two"),
+            Left(b"tri"),
+            Left(b"qua"),
+            Left(b"pen"),
+            Left(b"zeke"),
+            Left(b"ext-field"),
+            Left(b"bpsub"),
+        ],
+        1,
+        bp_sub_jet,
+    ),
+    (
+        &[
+            K_138,
+            Left(b"one"),
+            Left(b"two"),
+            Left(b"tri"),
+            Left(b"qua"),
+            Left(b"pen"),
+            Left(b"zeke"),
+            Left(b"ext-field"),
+            Left(b"bpscal"),
+        ],
+        1,
+        bp_scal_jet,
+    ),
+    (
+        &[
+            K_138,
+            Left(b"one"),
+            Left(b"two"),
+            Left(b"tri"),
+            Left(b"qua"),
+            Left(b"pen"),
+            Left(b"zeke"),
+            Left(b"ext-field"),
+            Left(b"bpmul"),
+        ],
+        1,
+        bp_mul_jet,
+    ),
+    (
+        &[
+            K_138,
+            Left(b"one"),
+            Left(b"two"),
+            Left(b"tri"),
+            Left(b"qua"),
+            Left(b"pen"),
+            Left(b"zeke"),
+            Left(b"bp-ntt"),
+        ],
+        1,
+        bp_ntt_jet,
+    ),
+    (
+        &[
+            K_138,
+            Left(b"one"),
+            Left(b"two"),
+            Left(b"tri"),
+            Left(b"qua"),
+            Left(b"pen"),
+            Left(b"zeke"),
+            Left(b"bp-fft"),
+        ],
+        1,
+        bp_fft_jet,
+    ),
+    (
+        &[
+            K_138,
+            Left(b"one"),
+            Left(b"two"),
+            Left(b"tri"),
+            Left(b"qua"),
+            Left(b"pen"),
+            Left(b"zeke"),
+            Left(b"ext-field"),
+            Left(b"bpsdiv"),
+        ],
+        1,
+        bp_sdiv_jet,
+    ),
+    (
+        &[
+            K_138,
+            Left(b"one"),
+            Left(b"two"),
+            Left(b"tri"),
+            Left(b"qua"),
+            Left(b"pen"),
+            Left(b"zeke"),
+            Left(b"ext-field"),
+            Left(b"bpsmod"),
+        ],
+        1,
+        bp_smod_jet,
+    ),
+    (
+        &[
+            K_138,
+            Left(b"one"),
+            Left(b"two"),
+            Left(b"tri"),
+            Left(b"qua"),
+            Left(b"pen"),
+            Left(b"zeke"),
+            Left(b"ext-field"),
+            Left(b"bpdvr"),
+        ],
+        1,
+        bpdvr_jet,
+    ),
+    */
+];
 
 pub const DOMAIN_CACHE_JETS: &[HotEntry] = &[
     // Replace bp-shift with cached version
