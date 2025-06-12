@@ -385,6 +385,21 @@ fn fpeval_poly(p: &[Felt], x: &Felt) -> Felt {
     result
 }
 
+// Helper function to perform bit-reversal permutation
+fn bit_reverse_copy(input: &[Felt], output: &mut [Felt], n: usize) {
+    let log_n = n.trailing_zeros() as usize;
+    
+    for i in 0..n {
+        let mut rev = 0;
+        let mut temp = i;
+        for _ in 0..log_n {
+            rev = (rev << 1) | (temp & 1);
+            temp >>= 1;
+        }
+        output[rev] = input[i];
+    }
+}
+
 // FFT using Number Theoretic Transform (NTT) algorithm
 fn fp_fft_poly(p: &[Felt], res: &mut [Felt]) {
     let n = p.len();
@@ -392,16 +407,14 @@ fn fp_fft_poly(p: &[Felt], res: &mut [Felt]) {
     // Must be power of 2
     assert!(n & (n - 1) == 0, "FFT requires power-of-2 length");
     
-    // Copy input to result
-    for i in 0..n {
-        res[i] = p[i];
-    }
+    // Bit-reversal permutation of input
+    bit_reverse_copy(p, res, n);
     
     // Find the appropriate root of unity for this size
     let log_n = n.trailing_zeros() as usize;
     let root = get_root_of_unity(log_n);
     
-    // Perform FFT using recursive Cooley-Tukey algorithm iteratively
+    // Perform FFT using iterative Cooley-Tukey algorithm
     let mut length = 2;
     while length <= n {
         let half_length = length / 2;
@@ -434,20 +447,18 @@ fn fp_ifft_poly(p: &[Felt], res: &mut [Felt]) {
     // Must be power of 2
     assert!(n & (n - 1) == 0, "IFFT requires power-of-2 length");
     
-    // Copy input to result
-    for i in 0..n {
-        res[i] = p[i];
-    }
+    // Bit-reversal permutation of input
+    bit_reverse_copy(p, res, n);
     
     // Find the appropriate root of unity for this size
     let log_n = n.trailing_zeros() as usize;
     let root = get_root_of_unity(log_n);
     
-    // Get inverse root
+    // Get inverse of root
     let mut inv_root = Felt::zero();
     finv(&root, &mut inv_root);
     
-    // Perform IFFT using the inverse root
+    // Perform IFFT using iterative Cooley-Tukey algorithm with inverse root
     let mut length = 2;
     while length <= n {
         let half_length = length / 2;
@@ -473,7 +484,12 @@ fn fp_ifft_poly(p: &[Felt], res: &mut [Felt]) {
     }
     
     // Scale by 1/n
-    let n_felt = Felt::from([Belt(n as u64), Belt(0), Belt(0)]);
+    let mut n_felt = Felt::zero();
+    let n_bytes = n.to_be_bytes();
+    for (i, &byte) in n_bytes.iter().rev().enumerate() {
+        n_felt.0[i / 8] |= (byte as u64) << ((i % 8) * 8);
+    }
+    
     let mut inv_n = Felt::zero();
     finv(&n_felt, &mut inv_n);
     
