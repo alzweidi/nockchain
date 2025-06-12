@@ -2,7 +2,7 @@
 // When i wrote this, only God almighty knows how it works,
 // Therefore, do not touch this routine, and if you do, it will fail most  surely.
 
-// Total hours wasted on fp jets  = 219h
+// Total hours wasted on fp jets  = 216hr
 
 
 
@@ -395,36 +395,139 @@ fn fpeval_poly(p: &[Felt], x: &Felt) -> Felt {
     result
 }
 
-// Basic FFT implementation (placeholder - needs proper root of unity)
+// FFT using Number Theoretic Transform (NTT) algorithm
 fn fp_fft_poly(p: &[Felt], res: &mut [Felt]) {
-    // For now, just copy the input
-    // A proper implementation would need the root of unity for the field
-    for i in 0..p.len() {
+    let n = p.len();
+    
+    // Must be power of 2
+    assert!(n & (n - 1) == 0, "FFT requires power-of-2 length");
+    
+    // Copy input to result
+    for i in 0..n {
         res[i] = p[i];
+    }
+    
+    // Find the appropriate root of unity for this size
+    let log_n = n.trailing_zeros() as usize;
+    let root = get_root_of_unity(log_n);
+    
+    // Perform FFT using recursive Cooley-Tukey algorithm iteratively
+    let mut length = 2;
+    while length <= n {
+        let half_length = length / 2;
+        let root_power = fpow_(&root, (n / length) as u64);
+        
+        for start in (0..n).step_by(length) {
+            let mut w = Felt::one();
+            
+            for j in 0..half_length {
+                let u = res[start + j];
+                let mut v = Felt::zero();
+                fmul(&res[start + j + half_length], &w, &mut v);
+                
+                fadd(&u, &v, &mut res[start + j]);
+                fsub(&u, &v, &mut res[start + j + half_length]);
+                
+                let w_prev = w;
+                fmul(&w_prev, &root_power, &mut w);
+            }
+        }
+        
+        length *= 2;
     }
 }
 
-// Basic IFFT implementation (placeholder)
+// Inverse FFT implementation  
 fn fp_ifft_poly(p: &[Felt], res: &mut [Felt]) {
-    // For now, just copy the input
-    // A proper implementation would need the inverse root of unity
-    for i in 0..p.len() {
+    let n = p.len();
+    
+    // Must be power of 2
+    assert!(n & (n - 1) == 0, "IFFT requires power-of-2 length");
+    
+    // Copy input to result
+    for i in 0..n {
         res[i] = p[i];
+    }
+    
+    // Find the appropriate root of unity for this size
+    let log_n = n.trailing_zeros() as usize;
+    let root = get_root_of_unity(log_n);
+    
+    // Get inverse root
+    let mut inv_root = Felt::zero();
+    finv(&root, &mut inv_root);
+    
+    // Perform IFFT using the inverse root
+    let mut length = 2;
+    while length <= n {
+        let half_length = length / 2;
+        let root_power = fpow_(&inv_root, (n / length) as u64);
+        
+        for start in (0..n).step_by(length) {
+            let mut w = Felt::one();
+            
+            for j in 0..half_length {
+                let u = res[start + j];
+                let mut v = Felt::zero();
+                fmul(&res[start + j + half_length], &w, &mut v);
+                
+                fadd(&u, &v, &mut res[start + j]);
+                fsub(&u, &v, &mut res[start + j + half_length]);
+                
+                let w_prev = w;
+                fmul(&w_prev, &root_power, &mut w);
+            }
+        }
+        
+        length *= 2;
+    }
+    
+    // Scale by 1/n
+    let n_felt = Felt::from([Belt(n as u64), Belt(0), Belt(0)]);
+    let mut inv_n = Felt::zero();
+    finv(&n_felt, &mut inv_n);
+    
+    for i in 0..n {
+        let temp = res[i];
+        fmul(&temp, &inv_n, &mut res[i]);
     }
 }
 
-// Lagrange interpolation (basic implementation)
+// Helper function to get root of unity for given log size
+fn get_root_of_unity(log_n: usize) -> Felt {
+    // These are the same precomputed roots from the Hoon code
+    const ROOTS: &[u64] = &[
+        0x0000000000000001, 0xffffffff00000000, 0x0001000000000000, 0xfffffffeff000001,
+        0xefffffff00000001, 0x00003fffffffc000, 0x0000008000000000, 0xf80007ff08000001,
+        0xbf79143ce60ca966, 0x1905d02a5c411f4e, 0x9d8f2ad78bfed972, 0x0653b4801da1c8cf,
+        0xf2c35199959dfcb6, 0x1544ef2335d17997, 0xe0ee099310bba1e2, 0xf6b2cffe2306baac,
+        0x54df9630bf79450e, 0xabd0a6e8aa3d8a0e, 0x81281a7b05f9beac, 0xfbd41c6b8caa3302,
+        0x30ba2ecd5e93e76d, 0xf502aef532322654, 0x4b2a18ade67246b5, 0xea9d5a1336fbc98b,
+        0x86cdcc31c307e171, 0x4bbaf5976ecfefd8, 0xed41d05b78d6e286, 0x10d78dd8915a171d,
+        0x59049500004a4485, 0xdfa8c93ba46d2666, 0x7e9bd009b86a0845, 0x400a7f755588e659,
+        0x185629dcda58878c,
+    ];
+    
+    assert!(log_n < ROOTS.len(), "FFT size too large");
+    Felt::from([Belt(ROOTS[log_n]), Belt(0), Belt(0)])
+}
+
+// Lagrange interpolation to find polynomial through given points
 fn interpolate_poly(domain: &[Felt], values: &[Felt], res: &mut [Felt]) {
     let n = domain.len();
     
-    // Initialize result to zero
-    for i in 0..n {
+    // Initialize result polynomial to zero
+    for i in 0..res.len() {
         res[i] = Felt::zero();
     }
 
-    // For each point, compute its Lagrange basis polynomial
+    // For each data point (domain[i], values[i])
     for i in 0..n {
-        // Compute the denominator for normalization
+        // Compute the Lagrange basis polynomial L_i(x)
+        // L_i(x) = product_{j!=i} (x - domain[j]) / (domain[i] - domain[j])
+        
+        // Start with the constant polynomial values[i] / denominator
+        // We'll compute denominator first
         let mut denom = Felt::one();
         for j in 0..n {
             if i != j {
@@ -436,13 +539,48 @@ fn interpolate_poly(domain: &[Felt], values: &[Felt], res: &mut [Felt]) {
             }
         }
         
-        // Scale by value[i] / denom
+        // Scale factor = values[i] / denom
         let mut scale = Felt::zero();
         fdiv(&values[i], &denom, &mut scale);
         
-        // Add to result (simplified version)
-        let temp = res[0];
-        fadd(&scale, &temp, &mut res[0]);
+        // Now build the numerator polynomial product_{j!=i} (x - domain[j])
+        // We'll use a temporary polynomial and multiply iteratively
+        let mut basis = vec![Felt::zero(); n];
+        basis[0] = Felt::one(); // Start with constant polynomial 1
+        let mut basis_deg = 1; // Current degree + 1
+        
+        for j in 0..n {
+            if i != j {
+                // Multiply basis by (x - domain[j])
+                // This means: new_basis = x * basis - domain[j] * basis
+                let mut new_basis = vec![Felt::zero(); basis_deg + 1];
+                
+                // x * basis part (shift coefficients up)
+                for k in 0..basis_deg {
+                    new_basis[k + 1] = basis[k];
+                }
+                
+                // - domain[j] * basis part
+                for k in 0..basis_deg {
+                    let mut prod = Felt::zero();
+                    fmul(&domain[j], &basis[k], &mut prod);
+                    let mut diff = Felt::zero();
+                    fsub(&new_basis[k], &prod, &mut diff);
+                    new_basis[k] = diff;
+                }
+                
+                basis = new_basis;
+                basis_deg += 1;
+            }
+        }
+        
+        // Now add scale * basis to result
+        for k in 0..basis_deg.min(res.len()) {
+            let mut term = Felt::zero();
+            fmul(&scale, &basis[k], &mut term);
+            let temp = res[k];
+            fadd(&temp, &term, &mut res[k]);
+        }
     }
 }
 
@@ -484,7 +622,7 @@ fn fpcompose_poly(p: &[Felt], q: &[Felt], res: &mut [Felt]) {
             let mut term = Felt::zero();
             fmul(&p[i], &q_power[j], &mut term);
             let temp = res[j];
-            fadd(&term, &temp, &mut res[j]);
+            fadd(&temp, &term, &mut res[j]);
         }
     }
 }
