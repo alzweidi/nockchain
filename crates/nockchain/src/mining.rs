@@ -12,6 +12,8 @@ use nockvm::noun::{Atom, D, T};
 use nockvm_macros::tas;
 use tempfile::tempdir;
 use tracing::{instrument, warn};
+use std::sync::Arc;
+use tokio::sync::Mutex;
 
 pub enum MiningWire {
     Mined,
@@ -113,6 +115,7 @@ pub fn create_mining_driver(
             }
             let mut next_attempt: Option<NounSlab> = None;
             let mut current_attempt: tokio::task::JoinSet<()> = tokio::task::JoinSet::new();
+            let mut current_attempt_stop_tx: Option<tokio::sync::oneshot::Sender<()>> = None;
 
             loop {
                 tokio::select! {
@@ -132,27 +135,59 @@ pub fn create_mining_driver(
                                 slab.copy_into(effect_cell.tail());
                                 slab
                             };
-                            if !current_attempt.is_empty() {
+
+                            // If there's an active attempt, send it a stop signal.
+                            // This ensures that a new `mine` effect always tries to stop the current work.
+                            if let Some(tx) = current_attempt_stop_tx.take() { // Take the sender (making current_attempt_stop_tx None)
+                                let _ = tx.send(()); // Send stop signal. Ignore error if receiver already dropped.
+                            }
+
+                            // Create a new oneshot channel for the new attempt
+                            let (new_stop_tx, new_stop_rx) = tokio::sync::oneshot::channel();
+                            // Store the sender for this new attempt
+                            current_attempt_stop_tx = Some(new_stop_tx);
+
+                            // If a task is currently running OR `next_attempt` already holds a queued candidate,
+                            // then this new candidate becomes the next one to process.
+                            // Otherwise, spawn it immediately.
+                            if !current_attempt.is_empty() || next_attempt.is_some() {
                                 next_attempt = Some(candidate_slab);
                             } else {
+                                // No task is running and no next attempt is queued, so spawn immediately.
                                 let (cur_handle, attempt_handle) = handle.dup();
                                 handle = cur_handle;
-                                current_attempt.spawn(mining_attempt(candidate_slab, attempt_handle));
+                                current_attempt.spawn(mining_attempt(
+                                    candidate_slab,
+                                    attempt_handle,
+                                    new_stop_rx, // <--- Pass the Receiver here
+                                ));
                             }
                         }
                     },
+                    // This branch fires when a spawned mining_attempt task completes
                     mining_attempt_res = current_attempt.join_next(), if !current_attempt.is_empty()  => {
                         if let Some(Err(e)) = mining_attempt_res {
                             warn!("Error during mining attempt: {e:?}");
                         }
-                        let Some(candidate_slab) = next_attempt else {
-                            continue;
-                        };
-                        next_attempt = None;
-                        let (cur_handle, attempt_handle) = handle.dup();
-                        handle = cur_handle;
-                        current_attempt.spawn(mining_attempt(candidate_slab, attempt_handle));
 
+                        // The task has completed, so its stop_tx is no longer relevant.
+                        current_attempt_stop_tx = None;
+
+                        // If there's a queued candidate, spawn it now
+                        if let Some(candidate_slab) = next_attempt.take() { // Use .take() to consume the value
+                            // Create a new oneshot channel for this new task
+                            let (new_stop_tx, new_stop_rx) = tokio::sync::oneshot::channel();
+                            // Store the sender for this new attempt
+                            current_attempt_stop_tx = Some(new_stop_tx);
+
+                            let (cur_handle, attempt_handle) = handle.dup();
+                            handle = cur_handle;
+                            current_attempt.spawn(mining_attempt(
+                                candidate_slab,
+                                attempt_handle,
+                                new_stop_rx, // <--- Pass the Receiver here
+                            ));
+                        }
                     }
                 }
             }
@@ -160,7 +195,7 @@ pub fn create_mining_driver(
     })
 }
 
-pub async fn mining_attempt(candidate: NounSlab, handle: NockAppHandle) -> () {
+pub async fn mining_attempt(candidate: NounSlab, handle: NockAppHandle, mut stop_rx: tokio::sync::oneshot::Receiver<()>) -> () {
     let snapshot_dir =
         tokio::task::spawn_blocking(|| tempdir().expect("Failed to create temporary directory"))
             .await
@@ -168,25 +203,45 @@ pub async fn mining_attempt(candidate: NounSlab, handle: NockAppHandle) -> () {
     let hot_state = zkvm_jetpack::hot::produce_prover_hot_state();
     let snapshot_path_buf = snapshot_dir.path().to_path_buf();
     let jam_paths = JamPaths::new(snapshot_dir.path());
+
     // Spawns a new std::thread for this mining attempt
-    let kernel =
+    // Wrap Kernel in Arc<Mutex> to allow safe concurrent access within tokio::select!
+    let kernel = Arc::new(Mutex::new(
         Kernel::load_with_hot_state_huge(snapshot_path_buf, jam_paths, KERNEL, &hot_state, false)
             .await
-            .expect("Could not load mining kernel");
-    let effects_slab = kernel
-        .poke(MiningWire::Candidate.to_wire(), candidate)
-        .await
-        .expect("Could not poke mining kernel with candidate");
-    for effect in effects_slab.to_vec() {
-        let Ok(effect_cell) = (unsafe { effect.root().as_cell() }) else {
-            drop(effect);
-            continue;
-        };
-        if effect_cell.head().eq_bytes("command") {
-            handle
-                .poke(MiningWire::Mined.to_wire(), effect)
-                .await
-                .expect("Could not poke nockchain with mined PoW");
+            .expect("Could not load mining kernel")
+    ));
+
+    tokio::select! {
+        // Branch 1: The kernel poke completes
+        // Use an async block to acquire the lock and then call poke()
+        effects_slab_res = async {
+            let k_guard = kernel.lock().await; // Acquire an exclusive lock on Kernel
+            // `k_guard` is `MutexGuard<Kernel>`, which derefs to `&mut Kernel`.
+            // `poke` takes `&self`, which is compatible with `&mut Kernel` (coercion).
+            k_guard.poke(MiningWire::Candidate.to_wire(), candidate).await
+        } => {
+            let effects_slab = effects_slab_res.expect("Could not poke mining kernel with candidate");
+            for effect in effects_slab.to_vec() {
+                let Ok(effect_cell) = (unsafe { effect.root().as_cell() }) else {
+                    drop(effect);
+                    continue;
+                };
+                if effect_cell.head().eq_bytes("command") {
+                    handle
+                        .poke(MiningWire::Mined.to_wire(), effect)
+                        .await
+                        .expect("Could not poke nockchain with mined PoW");
+                }
+            }
+        },
+        // Branch 2: A stop signal is received
+        _ = &mut stop_rx => {
+            // Signal received. Call the async kernel.stop() method and await it.
+            // Acquire the lock here as well to ensure exclusive access for stop().
+            let mut k_guard = kernel.lock().await;
+            let _ = k_guard.stop().await;
+            return;
         }
     }
 }
@@ -203,7 +258,11 @@ async fn set_mining_key(
         Atom::from_value(&mut set_mining_key_slab, pubkey).expect("Failed to create pubkey atom");
     let set_mining_key_poke = T(
         &mut set_mining_key_slab,
-        &[D(tas!(b"command")), set_mining_key.as_noun(), pubkey_cord.as_noun()],
+        &[
+            D(tas!(b"command")),
+            set_mining_key.as_noun(),
+            pubkey_cord.as_noun(),
+        ],
     );
     set_mining_key_slab.set_root(set_mining_key_poke);
 
@@ -242,7 +301,11 @@ async fn set_mining_key_advanced(
 
     let set_mining_key_poke = T(
         &mut set_mining_key_slab,
-        &[D(tas!(b"command")), set_mining_key_adv.as_noun(), configs_list],
+        &[
+            D(tas!(b"command")),
+            set_mining_key_adv.as_noun(),
+            configs_list,
+        ],
     );
     set_mining_key_slab.set_root(set_mining_key_poke);
 
@@ -259,7 +322,11 @@ async fn enable_mining(handle: &NockAppHandle, enable: bool) -> Result<PokeResul
         .expect("Failed to create enable-mining atom");
     let enable_mining_poke = T(
         &mut enable_mining_slab,
-        &[D(tas!(b"command")), enable_mining.as_noun(), D(if enable { 0 } else { 1 })],
+        &[
+            D(tas!(b"command")),
+            enable_mining.as_noun(),
+            D(if enable { 0 } else { 1 }),
+        ],
     );
     enable_mining_slab.set_root(enable_mining_poke);
     handle

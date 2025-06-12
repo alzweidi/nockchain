@@ -7,24 +7,38 @@ use crate::jets::cheetah_jets::*;
 use crate::jets::compute_table_jets::*;
 use crate::jets::crypto_jets::*;
 use crate::jets::fext_jets::*;
+use crate::jets::fp_jets::*;
 use crate::jets::mary_jets::*;
 use crate::jets::mega_jets::*;
 use crate::jets::memory_table_jets::*;
 use crate::jets::tip5_jets::*;
 use crate::jets::verifier_jets::*;
+use crate::domain_cache::{bp_shift_cached_jet, bp_intercosate_cached_jet, init_domain_cache, print_cache_stats};
 
 pub fn produce_prover_hot_state() -> Vec<HotEntry> {
+    eprintln!("[HOT] Producing prover hot state with {} cached jets", DOMAIN_CACHE_JETS.len());
+    
+    // Initialize domain cache when creating hot state
+    init_domain_cache();
+    
     let mut jets: Vec<HotEntry> = Vec::new();
     jets.extend(BASE_FIELD_JETS);
     jets.extend(BASE_POLY_JETS);
+    jets.extend(FIELD_POLY_JETS);
     jets.extend(CURVE_JETS);
     jets.extend(ZTD_JETS);
     jets.extend(KEYGEN_JETS);
     jets.extend(XTRA_JETS);
     jets.extend(EXTENSION_FIELD_JETS);
     jets.extend(ZKVM_TABLE_JETS);
+    jets.extend(DOMAIN_CACHE_JETS);
 
     jets
+}
+
+/// Dump cache statistics (for debugging)
+pub fn dump_cache_stats() {
+    print_cache_stats();
 }
 
 pub const ZKVM_TABLE_JETS: &[HotEntry] = &[
@@ -89,6 +103,7 @@ pub const ZKVM_TABLE_JETS: &[HotEntry] = &[
         compute_mega_extend_jet,
     ),
 ];
+
 pub const XTRA_JETS: &[HotEntry] = &[
     (
         &[
@@ -547,6 +562,173 @@ pub const BASE_POLY_JETS: &[HotEntry] = &[
         1,
         bp_hadamard_jet,
     ),
+    (
+        &[
+            K_138,
+            Left(b"one"),
+            Left(b"two"),
+            Left(b"tri"),
+            Left(b"qua"),
+            Left(b"pen"),
+            Left(b"zeke"),
+            Left(b"bpdvr"),
+        ],
+        1,
+        bpdvr_jet,
+    ),
+];
+
+pub const FIELD_POLY_JETS: &[HotEntry] = &[
+    (
+        &[
+            K_138,
+            Left(b"one"),
+            Left(b"two"),
+            Left(b"tri"),
+            Left(b"qua"),
+            Left(b"pen"),
+            Left(b"zeke"),
+            Left(b"ext-field"),
+            Left(b"fpadd"),
+        ],
+        1,
+        fp_add_jet,
+    ),
+    (
+        &[
+            K_138,
+            Left(b"one"),
+            Left(b"two"),
+            Left(b"tri"),
+            Left(b"qua"),
+            Left(b"pen"),
+            Left(b"zeke"),
+            Left(b"ext-field"),
+            Left(b"fpneg"),
+        ],
+        1,
+        fp_neg_jet,
+    ),
+    (
+        &[
+            K_138,
+            Left(b"one"),
+            Left(b"two"),
+            Left(b"tri"),
+            Left(b"qua"),
+            Left(b"pen"),
+            Left(b"zeke"),
+            Left(b"ext-field"),
+            Left(b"fpsub"),
+        ],
+        1,
+        fp_sub_jet,
+    ),
+    (
+        &[
+            K_138,
+            Left(b"one"),
+            Left(b"two"),
+            Left(b"tri"),
+            Left(b"qua"),
+            Left(b"pen"),
+            Left(b"zeke"),
+            Left(b"ext-field"),
+            Left(b"fpscal"),
+        ],
+        1,
+        fp_scal_jet,
+    ),
+    (
+        &[
+            K_138,
+            Left(b"one"),
+            Left(b"two"),
+            Left(b"tri"),
+            Left(b"qua"),
+            Left(b"pen"),
+            Left(b"zeke"),
+            Left(b"ext-field"),
+            Left(b"fpmul"),
+        ],
+        1,
+        fp_mul_jet,
+    ),
+    (
+        &[
+            K_138,
+            Left(b"one"),
+            Left(b"two"),
+            Left(b"tri"),
+            Left(b"qua"),
+            Left(b"pen"),
+            Left(b"zeke"),
+            Left(b"ext-field"),
+            Left(b"fpeval"),
+        ],
+        1,
+        fp_eval_jet,
+    ),
+    (
+        &[
+            K_138,
+            Left(b"one"),
+            Left(b"two"),
+            Left(b"tri"),
+            Left(b"qua"),
+            Left(b"pen"),
+            Left(b"zeke"),
+            Left(b"ext-field"),
+            Left(b"fp-fft"),
+        ],
+        1,
+        fp_fft_jet,
+    ),
+    (
+        &[
+            K_138,
+            Left(b"one"),
+            Left(b"two"),
+            Left(b"tri"),
+            Left(b"qua"),
+            Left(b"pen"),
+            Left(b"zeke"),
+            Left(b"ext-field"),
+            Left(b"fp-ifft"),
+        ],
+        1,
+        fp_ifft_jet,
+    ),
+    (
+        &[
+            K_138,
+            Left(b"one"),
+            Left(b"two"),
+            Left(b"tri"),
+            Left(b"qua"),
+            Left(b"pen"),
+            Left(b"zeke"),
+            Left(b"ext-field"),
+            Left(b"interpolate"),
+        ],
+        1,
+        interpolate_jet,
+    ),
+    (
+        &[
+            K_138,
+            Left(b"one"),
+            Left(b"two"),
+            Left(b"tri"),
+            Left(b"qua"),
+            Left(b"pen"),
+            Left(b"zeke"),
+            Left(b"ext-field"),
+            Left(b"fpcompose"),
+        ],
+        1,
+        fpcompose_jet,
+    ),
 ];
 
 pub const ZTD_JETS: &[HotEntry] = &[(
@@ -613,3 +795,10 @@ pub const CURVE_JETS: &[HotEntry] = &[(
     1,
     ch_scal_jet,
 )];
+
+pub const DOMAIN_CACHE_JETS: &[HotEntry] = &[
+    // Replace bp-shift with cached version
+    (&[K_138, Left(b"two"), Left(b"bp-shift")], 1, bp_shift_cached_jet),
+    // Replace bp-intercosate with cached version  
+    (&[K_138, Left(b"two"), Left(b"bp-intercosate")], 1, bp_intercosate_cached_jet),
+];
