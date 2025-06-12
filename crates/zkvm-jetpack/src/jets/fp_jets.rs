@@ -484,12 +484,7 @@ fn fp_ifft_poly(p: &[Felt], res: &mut [Felt]) {
     }
     
     // Scale by 1/n
-    let mut n_felt = Felt::zero();
-    let n_bytes = n.to_be_bytes();
-    for (i, &byte) in n_bytes.iter().rev().enumerate() {
-        n_felt.0[i / 8] |= (byte as u64) << ((i % 8) * 8);
-    }
-    
+    let n_felt = Felt::from([Belt(n as u64), Belt(0), Belt(0)]);
     let mut inv_n = Felt::zero();
     finv(&n_felt, &mut inv_n);
     
