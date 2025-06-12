@@ -197,9 +197,6 @@ pub fn fp_fft_jet(context: &mut Context, subject: Noun) -> Result {
     let (res, res_poly): (IndirectAtom, &mut [Felt]) =
         new_handle_mut_slice(&mut context.stack, Some(len));
     
-    // For FFT, we need a root of unity for the given length
-    // This will require the ordered_root function from Hoon
-    // For now, we'll implement a basic version
     fp_fft_poly(fp_poly.data(), res_poly);
 
     let res_cell = finalize_poly(&mut context.stack, Some(res_poly.len()), res);
@@ -222,6 +219,126 @@ pub fn fp_ifft_jet(context: &mut Context, subject: Noun) -> Result {
 
     let res_cell = finalize_poly(&mut context.stack, Some(res_poly.len()), res);
     Ok(res_cell)
+}
+
+// FFT using Number Theoretic Transform (NTT) algorithm - matches Hoon's fp-ntt
+fn fp_fft_poly(p: &[Felt], res: &mut [Felt]) {
+    let n = p.len();
+    
+    // Must be power of 2
+    assert!(n & (n - 1) == 0, "FFT requires power-of-2 length");
+    
+    // Base case: if length is 1, just copy
+    if n == 1 {
+        res[0] = p[0];
+        return;
+    }
+    
+    let half = n / 2;
+    let log_n = n.trailing_zeros() as usize;
+    let root = get_root_of_unity(log_n);
+    
+    // Separate even and odd indices
+    let mut evens = vec![Felt::zero(); half];
+    let mut odds = vec![Felt::zero(); half];
+    
+    for i in 0..n {
+        if i % 2 == 0 {
+            evens[i / 2] = p[i];
+        } else {
+            odds[i / 2] = p[i];
+        }
+    }
+    
+    // Recursively compute FFT of evens and odds
+    let mut evens_fft = vec![Felt::zero(); half];
+    let mut odds_fft = vec![Felt::zero(); half];
+    
+    // Square the root for recursive calls
+    let mut root_squared = Felt::zero();
+    fmul(&root, &root, &mut root_squared);
+    
+    // Recursive FFT on halves
+    fp_fft_recursive(&evens, &mut evens_fft, &root_squared);
+    fp_fft_recursive(&odds, &mut odds_fft, &root_squared);
+    
+    // Combine results: res[i] = evens_fft[i % half] + root^i * odds_fft[i % half]
+    for i in 0..n {
+        let mut root_power = fpow_(&root, i as u64);
+        let mut term = Felt::zero();
+        fmul(&root_power, &odds_fft[i % half], &mut term);
+        fadd(&evens_fft[i % half], &term, &mut res[i]);
+    }
+}
+
+// Recursive helper for FFT
+fn fp_fft_recursive(p: &[Felt], res: &mut [Felt], root: &Felt) {
+    let n = p.len();
+    
+    if n == 1 {
+        res[0] = p[0];
+        return;
+    }
+    
+    let half = n / 2;
+    
+    // Separate even and odd indices
+    let mut evens = vec![Felt::zero(); half];
+    let mut odds = vec![Felt::zero(); half];
+    
+    for i in 0..n {
+        if i % 2 == 0 {
+            evens[i / 2] = p[i];
+        } else {
+            odds[i / 2] = p[i];
+        }
+    }
+    
+    // Square the root for recursive calls
+    let mut root_squared = Felt::zero();
+    fmul(root, root, &mut root_squared);
+    
+    // Recursive FFT on halves
+    let mut evens_fft = vec![Felt::zero(); half];
+    let mut odds_fft = vec![Felt::zero(); half];
+    
+    fp_fft_recursive(&evens, &mut evens_fft, &root_squared);
+    fp_fft_recursive(&odds, &mut odds_fft, &root_squared);
+    
+    // Combine results
+    for i in 0..n {
+        let mut root_power = fpow_(root, i as u64);
+        let mut term = Felt::zero();
+        fmul(&root_power, &odds_fft[i % half], &mut term);
+        fadd(&evens_fft[i % half], &term, &mut res[i]);
+    }
+}
+
+// Inverse FFT implementation - matches Hoon's fp-ifft
+fn fp_ifft_poly(p: &[Felt], res: &mut [Felt]) {
+    let n = p.len();
+    
+    // Must be power of 2
+    assert!(n & (n - 1) == 0, "IFFT requires power-of-2 length");
+    
+    // Get root of unity and invert it
+    let log_n = n.trailing_zeros() as usize;
+    let root = get_root_of_unity(log_n);
+    let mut inv_root = Felt::zero();
+    finv(&root, &mut inv_root);
+    
+    // Run FFT with inverse root
+    fp_fft_recursive(p, res, &inv_root);
+    
+    // Scale by 1/n
+    let n_felt = Felt::from([Belt(n as u64), Belt(0), Belt(0)]);
+    let mut inv_n = Felt::zero();
+    finv(&n_felt, &mut inv_n);
+    
+    for i in 0..n {
+        let temp = res[i];
+        fmul(&temp, &inv_n, &mut res[i]);
+    }
 }
 
 // interpolate_jet: Lagrange interpolation
@@ -383,115 +500,6 @@ fn fpeval_poly(p: &[Felt], x: &Felt) -> Felt {
     }
 
     result
-}
-
-// Helper function to perform bit-reversal permutation
-fn bit_reverse_copy(input: &[Felt], output: &mut [Felt], n: usize) {
-    let log_n = n.trailing_zeros() as usize;
-    
-    for i in 0..n {
-        let mut rev = 0;
-        let mut temp = i;
-        for _ in 0..log_n {
-            rev = (rev << 1) | (temp & 1);
-            temp >>= 1;
-        }
-        output[rev] = input[i];
-    }
-}
-
-// FFT using Number Theoretic Transform (NTT) algorithm
-fn fp_fft_poly(p: &[Felt], res: &mut [Felt]) {
-    let n = p.len();
-    
-    // Must be power of 2
-    assert!(n & (n - 1) == 0, "FFT requires power-of-2 length");
-    
-    // Bit-reversal permutation of input
-    bit_reverse_copy(p, res, n);
-    
-    // Find the appropriate root of unity for this size
-    let log_n = n.trailing_zeros() as usize;
-    let root = get_root_of_unity(log_n);
-    
-    // Perform FFT using iterative Cooley-Tukey algorithm
-    let mut length = 2;
-    while length <= n {
-        let half_length = length / 2;
-        let root_power = fpow_(&root, (n / length) as u64);
-        
-        for start in (0..n).step_by(length) {
-            let mut w = Felt::one();
-            
-            for j in 0..half_length {
-                let u = res[start + j];
-                let mut v = Felt::zero();
-                fmul(&res[start + j + half_length], &w, &mut v);
-                
-                fadd(&u, &v, &mut res[start + j]);
-                fsub(&u, &v, &mut res[start + j + half_length]);
-                
-                let w_prev = w;
-                fmul(&w_prev, &root_power, &mut w);
-            }
-        }
-        
-        length *= 2;
-    }
-}
-
-// Inverse FFT implementation  
-fn fp_ifft_poly(p: &[Felt], res: &mut [Felt]) {
-    let n = p.len();
-    
-    // Must be power of 2
-    assert!(n & (n - 1) == 0, "IFFT requires power-of-2 length");
-    
-    // Bit-reversal permutation of input
-    bit_reverse_copy(p, res, n);
-    
-    // Find the appropriate root of unity for this size
-    let log_n = n.trailing_zeros() as usize;
-    let root = get_root_of_unity(log_n);
-    
-    // Get inverse of root
-    let mut inv_root = Felt::zero();
-    finv(&root, &mut inv_root);
-    
-    // Perform IFFT using iterative Cooley-Tukey algorithm with inverse root
-    let mut length = 2;
-    while length <= n {
-        let half_length = length / 2;
-        let root_power = fpow_(&inv_root, (n / length) as u64);
-        
-        for start in (0..n).step_by(length) {
-            let mut w = Felt::one();
-            
-            for j in 0..half_length {
-                let u = res[start + j];
-                let mut v = Felt::zero();
-                fmul(&res[start + j + half_length], &w, &mut v);
-                
-                fadd(&u, &v, &mut res[start + j]);
-                fsub(&u, &v, &mut res[start + j + half_length]);
-                
-                let w_prev = w;
-                fmul(&w_prev, &root_power, &mut w);
-            }
-        }
-        
-        length *= 2;
-    }
-    
-    // Scale by 1/n
-    let n_felt = Felt::from([Belt(n as u64), Belt(0), Belt(0)]);
-    let mut inv_n = Felt::zero();
-    finv(&n_felt, &mut inv_n);
-    
-    for i in 0..n {
-        let temp = res[i];
-        fmul(&temp, &inv_n, &mut res[i]);
-    }
 }
 
 // Helper function to get root of unity for given log size
